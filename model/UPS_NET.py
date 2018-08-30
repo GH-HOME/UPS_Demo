@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn.init import kaiming_normal
 
 __all__ =[
@@ -56,11 +57,11 @@ class Upsnets(nn.Module):
         self.convN_1=conv(False,1,1,kernel_size=1,stride=1)
 
         self.fc1=nn.Linear(192*192,1024)
-        self.fc2=nn.linear(1024,9)
+        self.fc2=nn.Linear(1024,9)
 
         # for the light line
         self.convL_1=conv(self.batchNorm,256,128,kernel_size=3,stride=1)
-        self.convL_2=conv(False,128,1,kernel_size=3,stride=1)
+        self.convL_2=conv(False,129,1,kernel_size=3,stride=1)
 
         for m in self.modules():
             if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d):
@@ -71,25 +72,51 @@ class Upsnets(nn.Module):
                     m.weight.data.fill_(1)
                     m.bias.data.zero_()
 
-        def forward(self, x):
-            # here x is a P*P*C matrix normalized to (0-1) C is the light number, P is the shape
-            # the data structure is [N C H W]
+    def forward(self, x):
+        # here x is a P*P*C matrix normalized to (0-1) C is the light number, P is the shape
+        # the data structure is [N C H W]
 
-            # we first calculate the Pseudo normal and light
+        # we first calculate the Pseudo normal and light
+        images, P_L, P_N, mask=x['Imgs'], x['P_L'], x['P_N'], x['mask']
 
-            batch_num, light_num, height, width=x.shape
+        #build observe map for light
+        scale_size=45
+        P_observeMap=torch.zeros(scale_size,scale_size)
+        listsize=list(P_L.shape)
+        for i in range(listsize[0]):
+            x = (P_L[i,0]*0.5+0.5)*scale_size
+            y = (P_L[i, 1] * 0.5 + 0.5) * scale_size
+            z = (P_L[i, 2] * 0.5 + 0.5) * scale_size
+            P_observeMap[x,y]=z
 
-            with torch.no_grad():
-                for i in range(batch_num):
-                    I=x[i]
-                    print(I.shape)
+        #encoder part
+        out_conv2 = self.conv2(self.conv1(x))
+        out_conv4 = self.conv3(self.conv3(out_conv2))
 
+        #light line
+        out_deconv_L1=self.convL_1(out_conv4)
+        out_deconv_L2=torch.cat([out_deconv_L1,P_observeMap],1)
+        out_L=self.convL_2(out_deconv_L2)
 
-        def weight_parameters(self):
-            return [param for name, param in self.named_parameters() if 'weight' in name]
+        #normal line
+        out_deconv_N=self.deconv2(self.deconv1(out_conv4))
+        listsize=list(mask)
+        for i in range(listsize[0]):
+            for j in range(listsize[1]):
+                if mask[i,j]==0:
+                    out_deconv_N[:,:,i,j]=0
+        out_deconv_N=self.convN_1(torch.cat([out_deconv_N,P_N],1))
+        # estimate ambiguity matrix
+        out_deconv_N_flat=out_deconv_N.view(-1, self.num_flat_features(out_deconv_N))
+        out_AM=self.fc2(self.fc1(out_deconv_N_flat))
 
-        def bias_parameters(self):
-            return [param for name, param in self.named_parameters() if 'bias' in name]
+        return out_L,out_AM
+
+    def weight_parameters(self):
+        return [param for name, param in self.named_parameters() if 'weight' in name]
+
+    def bias_parameters(self):
+        return [param for name, param in self.named_parameters() if 'bias' in name]
 
 
 def upsnets(data=None):

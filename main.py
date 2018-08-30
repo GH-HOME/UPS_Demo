@@ -34,13 +34,13 @@ group.add_argument('-s', '--split-file', default=None, type=str,
 group.add_argument('--split-value', default=0.8, type=float,
                    help='test-val split proportion (between 0 (only test) and 1 (only train))')
 
-parser.add_argument('--arch', '-a', metavar='ARCH', default='Upsnets',
+parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets',
                     choices=model_names,
                     help='model architecture, overwritten if pretrained is specified: ' +
                     ' | '.join(model_names))
 parser.add_argument('--solver', default='adam',choices=['adam','sgd'],
                     help='solver algorithms')
-parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=1, type=int, metavar='N',
                     help='number of data loading workers')
 parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -61,6 +61,8 @@ parser.add_argument('--weight-decay', '--wd', default=4e-4, type=float,
 parser.add_argument('--bias-decay', default=0, type=float,
                     metavar='B', help='bias decay')
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
+parser.add_argument('--pretrained', dest='pretrained', default=None,
+                    help='path to pre-trained model')
 
 best_EPE = -1
 n_iter = 0
@@ -90,7 +92,7 @@ def main():
 
     input_transform = tramsforms.Compose([
         image_transforms.ArrayToTensor(),
-        tramsforms.CenterCrop(192)
+        tramsforms.CenterCrop(180)
 
     ])
 
@@ -101,6 +103,39 @@ def main():
         transform=input_transform,
         split=args.split_file if args.split_file else args.split_value
     )
+    print('{} samples found, {} train samples and {} test samples '.format(len(test_set) + len(train_set),
+                                                                           len(train_set),
+                                                                           len(test_set)))
+
+    train_loader = torch.utils.data.DataLoader(
+        train_set, batch_size=args.batch_size,
+        num_workers=args.workers, pin_memory=True, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(
+        test_set, batch_size=args.batch_size,
+        num_workers=args.workers, pin_memory=True, shuffle=False)
+
+    if args.pretrained:
+        network_data = torch.load(args.pretrained)
+        args.arch = network_data['arch']
+        print("=> using pre-trained model '{}'".format(args.arch))
+    else:
+        network_data = None
+        print("=> creating model '{}'".format(args.arch))
+
+    mymodel=model.__dict__[args.arch](network_data).cuda()
+    mymodel=torch.nn.DataParallel(mymodel).cuda()
+    cudnn.benchmark=True
+
+    assert(args.solver in ['adam','sgd'])
+    print('=> setting {} solver '.format(args.solver))
+    param_groups =[{'params': mymodel.module.bias_parameters(), 'weight_decay': args.bias_decay},
+                   {'params': mymodel.module.weight_parameters(),'weight_decay':args.weight_decay}]
+
+    if args.solver == 'adam':
+        optimizer=torch.optim.Adam(param_groups,args.lr,betas=(args.momentum,args.beta))
+    elif args.solver=='sgd':
+        optimizer=torch.optim.SGD(param_groups,args.lr,args.momentum)
+
 
 
 if __name__=='__main__':

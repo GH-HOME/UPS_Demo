@@ -63,7 +63,7 @@ class Pseudo_NL_calculator(object):
         sigmaM=np.diag(sigma)
 
         self.P_N=np.dot(self.P_N,np.sqrt(sigmaM))
-        self.P_L=np.dot(np.sqrt(sigmaM),self.P_L)
+        self.P_L=np.dot(np.sqrt(sigmaM),self.P_L).transpose()
 
         self.P_N = normalize(self.P_N, axis=1)
         self.P_L = normalize(self.P_L, axis=0)

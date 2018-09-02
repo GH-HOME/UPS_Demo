@@ -50,6 +50,8 @@ parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
 parser.add_argument('-b', '--batch-size', default=6, type=int,
                     metavar='N', help='mini-batch size')
+parser.add_argument('-sw', '--sparse_weight', default=0.6, type=float,
+                    metavar='W', help='weight for control sparsity in loss')
 parser.add_argument('--lr', '--learning-rate', default=1e-6, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
@@ -126,8 +128,6 @@ def main():
 
     mymodel=models.__dict__[args.arch](network_data,input_N=Light_num).cuda()
     mymodel=torch.nn.DataParallel(mymodel).cuda()
-    #mymodel=models.__dict__[args.arch](network_data)
-    #mymodel=torch.nn.DataParallel(mymodel)
     cudnn.benchmark=True
 
     assert(args.solver in ['adam','sgd'])
@@ -190,7 +190,7 @@ def train(train_loader, mymodel,optimizer, epoch, train_writer):
         # plt.imshow(out_L_show[0][0])
         # plt.show()
 
-        lossL=calculateLoss_L(out_L,target_var['light'])
+        lossL=calculateLoss_L(out_L,target_var['light'],args.sparse_weight)
 
         losses.update(lossL.data[0])
         train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
@@ -208,11 +208,13 @@ def train(train_loader, mymodel,optimizer, epoch, train_writer):
             break
     return losses.avg
 
-def calculateLoss_L(input_Lmap,target_Lmap):
+def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight):
     input_Lmap=input_Lmap.squeeze()
     target_Lmap = target_Lmap.squeeze()
-
-    return torch.norm(input_Lmap-target_Lmap.float()).mean()
+    Nonzero_tar, batch=torch.nonzero(target_Lmap).shape
+    Nonzero_input, batch = torch.nonzero(input_Lmap).shape
+    sparsity=np.abs(Nonzero_tar-Nonzero_input)/batch
+    return torch.norm(input_Lmap-target_Lmap.float()).mean()+sparse_weight*sparsity
 
 
 

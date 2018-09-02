@@ -25,7 +25,7 @@ class UPSDataset(object):
         self.datalist=[]  # data list text which used to load data
         self.originalNlist=[]
         self.albedo=1
-        self.total_Num = 30*2  # total light in the sphere, for the semi-sphere light, you need to *2
+        self.total_Num = 500*2  # total light in the sphere, for the semi-sphere light, you need to *2
 
 
         self.Light=[]
@@ -118,8 +118,6 @@ class UPSDataset(object):
 
         assert M.shape == (light_num, 3, m * n)
         assert N.shape == (3, m * n)
-
-        def_file_name = obj_name+"_L_{light_index}.png"
         mask_file_name= obj_name+"_M.png"
         mask_file_name = os.path.join(self.tardatasetdir, mask_file_name)
 
@@ -132,7 +130,7 @@ class UPSDataset(object):
             m_img = M[l, :, :]  # [light_num, 3, m*n]
             m_img = m_img.astype(np.float) / np.max(M) * np.iinfo(np.uint16).max
             m_img = m_img.T.reshape(m, n, 3).astype(np.uint16)
-            write_path=os.path.join(self.tardatasetdir, def_file_name.format(light_index=l))
+            write_path=os.path.join(self.tardatasetdir, obj_name+"_L_{:0>4d}.png".format(l))
             self.datalist.append(write_path)
             cv2.imwrite(write_path, m_img[:, :, ::-1])
 

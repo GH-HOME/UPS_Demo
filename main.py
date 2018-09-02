@@ -10,21 +10,21 @@ import torch.optim
 import torch.utils.data
 import torchvision.transforms as tramsforms
 import image_transforms
-import model
+import models
 import dataset
 
 import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
 
-model_names=sorted(name for name in model.__dict__
+model_names=sorted(name for name in models.__dict__
                    if name.islower() and not name.startswith("__"))
 
 
 parser = argparse.ArgumentParser(description='PyTorch UPSNet Training on several Datasets',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--datadir', metavar='DIR',default='./dataset/time_08_30_08_24_Light_500_shape_10_albedo_1/UPSDataset',
+parser.add_argument('--datadir', metavar='DIR',default='./dataset/time_09_02_11_55_Light_500_shape_10_albedo_1/UPSDataset',
                     help='path to dataset')
 parser.add_argument('--dataname', metavar='DataName',default='Lambertian_direction',
                     help='data set name')
@@ -48,9 +48,9 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=8, type=int,
+parser.add_argument('-b', '--batch-size', default=4, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('--lr', '--learning-rate', default=0.0001, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.000001, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -63,9 +63,11 @@ parser.add_argument('--bias-decay', default=0, type=float,
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', dest='pretrained', default=None,
                     help='path to pre-trained model')
+parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 
 best_EPE = -1
 n_iter = 0
+Light_num=50
 
 def main():
     global args, best_EPE, save_path
@@ -90,9 +92,9 @@ def main():
     train_writer=SummaryWriter(os.path.join(save_path,'train'))
     test_writer = SummaryWriter(os.path.join(save_path, 'test'))
 
-    input_transform = tramsforms.Compose([
+    input_transform = image_transforms.Compose([
         image_transforms.ArrayToTensor(),
-        tramsforms.CenterCrop(180)
+        image_transforms.CenterCrop(128)
 
     ])
 
@@ -101,12 +103,12 @@ def main():
     train_set, test_set = dataset.__dict__[args.dataname](
         args.datadir,
         transform=input_transform,
-        split=args.split_file if args.split_file else args.split_value
+        split=args.split_file if args.split_file else args.split_value,
+        light_num=Light_num
     )
     print('{} samples found, {} train samples and {} test samples '.format(len(test_set) + len(train_set),
                                                                            len(train_set),
                                                                            len(test_set)))
-
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=args.batch_size,
         num_workers=args.workers, pin_memory=True, shuffle=True)
@@ -122,8 +124,10 @@ def main():
         network_data = None
         print("=> creating model '{}'".format(args.arch))
 
-    mymodel=model.__dict__[args.arch](network_data).cuda()
+    mymodel=models.__dict__[args.arch](network_data,input_N=Light_num).cuda()
     mymodel=torch.nn.DataParallel(mymodel).cuda()
+    #mymodel=models.__dict__[args.arch](network_data)
+    #mymodel=torch.nn.DataParallel(mymodel)
     cudnn.benchmark=True
 
     assert(args.solver in ['adam','sgd'])
@@ -135,6 +139,84 @@ def main():
         optimizer=torch.optim.Adam(param_groups,args.lr,betas=(args.momentum,args.beta))
     elif args.solver=='sgd':
         optimizer=torch.optim.SGD(param_groups,args.lr,args.momentum)
+
+    scheduler= torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,gamma=0.5)
+
+    for epoch in range(args.start_epoch, args.epochs):
+        scheduler.step()
+        train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
+
+
+def train(train_loader, mymodel,optimizer, epoch, train_writer):
+    global n_iter, args
+    batch_time= AverageMeter()
+    data_time=AverageMeter()
+    losses=AverageMeter()
+    Acc=AverageMeter()
+
+    epoch_size=len(train_loader) if args.epoch_size==0 else min(len(train_loader),args.epoch_size)
+
+    # switch to train mode
+    mymodel.train()
+
+    end=time.time()
+
+    for i, (inputs, target) in enumerate(train_loader):
+        data_time.update(time.time()-end)
+        input_var=inputs
+        target_var=target
+        for item in inputs.keys():
+            input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
+        for item in target.keys():
+            target_var[item]  = torch.autograd.Variable(target[item]).cuda()
+        out_L=mymodel.forward(input_var)
+        lossL=calculateLoss_L(out_L,target_var['light'])
+
+        losses.update(lossL.data[0])
+        train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
+        n_iter+=1
+        optimizer.zero_grad()
+        lossL.backward()
+        optimizer.step()
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if i % 20 == 0:
+            print('Epoch: [{0}][{1}/{2}]\t Time {3}\t Data {4}\t Loss {5}\t '.format(epoch, i, epoch_size, batch_time, data_time, losses))
+
+        if i >= epoch_size:
+            break
+    return losses.avg
+
+def calculateLoss_L(input_Lmap,target_Lmap):
+    input_Lmap=input_Lmap.squeeze()
+    target_Lmap = target_Lmap.squeeze()
+    return torch.norm(input_Lmap-target_Lmap.float()).mean()
+
+
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+    def __repr__(self):
+        return '{:.3f} ({:.3f})'.format(self.val, self.avg)
+
 
 
 

@@ -70,15 +70,13 @@ class CenterCrop(object):
         th, tw = self.size
         x1 = int(round((w1 - tw) / 2.))
         y1 = int(round((h1 - th) / 2.))
-        x2 = int(round((w2 - tw) / 2.))
-        y2 = int(round((h2 - th) / 2.))
 
         inputs['Imgs'] = inputs['Imgs'][:, y1: y1 + th, x1: x1 + tw]
         inputs['P_N']=inputs['P_N'][y1: y1 + th, x1: x1 + tw,:]
         inputs['mask'] = inputs['mask'][y1: y1 + th, x1: x1 + tw]
 
-        targets['normal'] = targets[y1: y1 + th, x1: x1 + tw,:]
-        return inputs,targets
+        targets['normal'] = targets['normal'][y1: y1 + th, x1: x1 + tw,:]
+        return inputs, targets
 
 
 class Scale(object):

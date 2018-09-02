@@ -21,18 +21,16 @@ class Pseudo_NL_calculator(object):
         self.index=[]
         self.mask=[]
 
-    def __init__(self, imagelist,mask_path):
+    def __init__(self, imagelist, mask_path):
         if imagelist is None or mask_path is None:
             raise RuntimeError("Empty image/mask list input")
 
-        mask=cv2.imread(mask_path,0)
+        mask=cv2.imread(mask_path[0],0)
         self.shape = mask.shape
         self.mask = mask/255
         mask=mask.reshape(-1)
         self.imageSet = []
         self.index=np.where(mask!=0)
-
-
 
         I=[]
         for i in range(len(imagelist)):
@@ -42,7 +40,7 @@ class Pseudo_NL_calculator(object):
             Ii=Ii.reshape(-1)
             I.append(Ii[self.index])
 
-        print("The shape of I is {}".format(len(I)))
+        #print("The shape of I is {}".format(len(I)))
         self.I=np.array(I).transpose()
         self.freedom = 3
         self.P_L = []
@@ -76,8 +74,8 @@ class Pseudo_NL_calculator(object):
         self.P_N=P_N_all.reshape(m,n,3)
 
 
-        print("P_N shape {} sigma shape {} P_L shape{}  during time is {}".format(self.P_N.shape, sigmaM.shape,
-                                                                              self.P_L.shape, duration))
+        # print("P_N shape {} sigma shape {} P_L shape{}  during time is {}".format(self.P_N.shape, sigmaM.shape,
+        #                                                                       self.P_L.shape, duration))
 
 if __name__ == '__main__':
 

@@ -1,6 +1,7 @@
 import torch.utils.data as data
 from scipy.ndimage import imread
 import numpy as np
+from matplotlib import pyplot as plt
 from .Calculate_Pseudo_NL import Pseudo_NL_calculator as P_Calc
 
 def default_loader(path_imgs):
@@ -33,6 +34,10 @@ class ListDataset(data.Dataset):
 
         inputs={'Imgs':P_NL.imageSet, 'P_L':self.CreatObservemapFromL(P_NL.P_L), 'P_N':P_NL.P_N, 'mask':P_NL.mask}
         targets={'light':self.CreatObservemapFromL(Light_sample), 'normal':normal}
+        # plt.imshow(inputs['P_L'],cmap=plt.cm.gray)
+        # plt.imshow(targets['light'], cmap=plt.cm.gray)
+        # plt.show()
+
 
         if self.co_transform is not None:
             inputs, targets = self.co_transform(inputs, targets)
@@ -44,7 +49,7 @@ class ListDataset(data.Dataset):
 
         return inputs, targets
 
-    def CreatObservemapFromL(self,L=None,scale_size = 32):
+    def CreatObservemapFromL(self, L=None, scale_size = 32):
         # build observe map for light
         if L is None:
             raise RuntimeError("no light input")
@@ -56,7 +61,8 @@ class ListDataset(data.Dataset):
             y = int((L[i, 1] * 0.5 + 0.5) * scale_size)
             z = (L[i, 2] * 0.5 + 0.5) * scale_size
             P_observeMap[x, y] = z
-            return P_observeMap
+
+        return P_observeMap
 
     def __len__(self):
         return len(self.path_list)

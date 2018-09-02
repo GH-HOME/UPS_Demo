@@ -12,7 +12,7 @@ import torchvision.transforms as tramsforms
 import image_transforms
 import models
 import dataset
-
+from matplotlib import pyplot as plt
 import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
@@ -40,7 +40,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets',
                     ' | '.join(model_names))
 parser.add_argument('--solver', default='adam',choices=['adam','sgd'],
                     help='solver algorithms')
-parser.add_argument('-j', '--workers', default=1, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers')
 parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -48,9 +48,9 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=4, type=int,
+parser.add_argument('-b', '--batch-size', default=6, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('--lr', '--learning-rate', default=0.000001, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-6, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -111,7 +111,7 @@ def main():
                                                                            len(test_set)))
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=args.batch_size,
-        num_workers=args.workers, pin_memory=True, shuffle=True)
+        num_workers=args.workers, pin_memory=True, shuffle=False)
     val_loader = torch.utils.data.DataLoader(
         test_set, batch_size=args.batch_size,
         num_workers=args.workers, pin_memory=True, shuffle=False)
@@ -162,6 +162,19 @@ def train(train_loader, mymodel,optimizer, epoch, train_writer):
     end=time.time()
 
     for i, (inputs, target) in enumerate(train_loader):
+
+        #plot the input data
+        # plt.title('origin image')
+        # plt.imshow(inputs['Imgs'][0][0])
+        # plt.show()
+        #
+        # plt.title('P_Light')
+        # plt.imshow(inputs['P_L'][0])
+        # plt.show()
+        # plt.title('Ground truth light')
+        # plt.imshow(target['light'][0])
+        # plt.show()
+
         data_time.update(time.time()-end)
         input_var=inputs
         target_var=target
@@ -169,7 +182,14 @@ def train(train_loader, mymodel,optimizer, epoch, train_writer):
             input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
         for item in target.keys():
             target_var[item]  = torch.autograd.Variable(target[item]).cuda()
-        out_L=mymodel.forward(input_var)
+        out_L=mymodel(input_var)
+
+        #plot the output data
+        # plt.title('output light image')
+        # out_L_show=out_L.detach().cpu().numpy()
+        # plt.imshow(out_L_show[0][0])
+        # plt.show()
+
         lossL=calculateLoss_L(out_L,target_var['light'])
 
         losses.update(lossL.data[0])
@@ -191,6 +211,7 @@ def train(train_loader, mymodel,optimizer, epoch, train_writer):
 def calculateLoss_L(input_Lmap,target_Lmap):
     input_Lmap=input_Lmap.squeeze()
     target_Lmap = target_Lmap.squeeze()
+
     return torch.norm(input_Lmap-target_Lmap.float()).mean()
 
 

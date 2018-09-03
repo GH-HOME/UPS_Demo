@@ -16,6 +16,7 @@ from matplotlib import pyplot as plt
 import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
+import math
 
 model_names=sorted(name for name in models.__dict__
                    if name.islower() and not name.startswith("__"))
@@ -48,7 +49,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=4, type=int,
+parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
@@ -153,21 +154,20 @@ def main():
         train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
         train_writer.add_scalar('mean loss in train epoch', train_loss, epoch)
 
-        # eval_loss = validate(val_loader, mymodel, test_writer)
-        # test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
-        #
-        # if eval_loss < 0:
-        #     best_EPE = eval_loss
-        #
-        # is_best = eval_loss < best_EPE
-        # best_EPE = min(eval_loss, best_EPE)
-        # save_checkpoint({
-        #     'epoch': epoch + 1,
-        #     'arch': args.arch,
-        #     'state_dict': mymodel.module.state_dict(),
-        #     'best_EPE': best_EPE
-        # }, is_best)
+        eval_loss = validate(val_loader, mymodel, test_writer)
+        test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
 
+        if eval_loss < 0:
+            best_EPE = eval_loss
+
+        is_best = eval_loss < best_EPE
+        best_EPE = min(eval_loss, best_EPE)
+        save_checkpoint({
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'state_dict': mymodel.module.state_dict(),
+            'best_EPE': best_EPE
+        }, is_best)
 
 
 def train(train_loader, mymodel, optimizer, epoch, train_writer):
@@ -225,13 +225,15 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         end = time.time()
 
         if i % args.print_intervel == 0:
+            out_L_show=out_L.detach().cpu().numpy()
+            out_L_show_=out_L_show[0].reshape(-1,3)
+            tar_L_show=target['light'].cpu().numpy()
+            tar_L_show_=tar_L_show[0].reshape(-1,3)
+
             print('Epoch: [{0}][{1}/{2}]\t Time {3}\t Data {4}\t Loss {5}\t '.format(epoch, i, epoch_size, batch_time, data_time, losses))
             train_writer.add_image('train/Origin image', inputs['Imgs'][0][0],i)
-            train_writer.add_image('train/P_Light', inputs['P_L'][0], i)
-            train_writer.add_image('train/Ground truth light', target['light'][0], i)
-            train_writer.add_image('train/Predicted light', out_L.detach().cpu().numpy()[0][0], i)
-
-
+            train_writer.add_image('train/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
+            train_writer.add_image('train/Predicted light', CreatObservemapFromL(out_L_show_), i)
 
         if i >= epoch_size:
             break
@@ -240,12 +242,24 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
 
 def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight):
     input_Lmap=input_Lmap.squeeze()
+    input_Lmap_norm=torch.norm(input_Lmap,2,2)
     target_Lmap = target_Lmap.squeeze()
-    n,w,h=target_Lmap.shape
-    Nonzero_tar, batch=torch.nonzero(target_Lmap).shape
-    Nonzero_input, batch = torch.nonzero(input_Lmap).shape
-    sparsity=np.abs(Nonzero_tar-Nonzero_input)/(batch*w*h)
-    return torch.norm(input_Lmap-target_Lmap.float()).mean()+sparse_weight*sparsity
+
+    input_Lmap_norm=input_Lmap_norm.view(-1).unsqueeze(1)
+
+    input_Lmap_norm=input_Lmap_norm.repeat(1,3)
+
+    input_Lmap = input_Lmap.view(-1,3)
+    input_Lmap=input_Lmap/input_Lmap_norm
+    target_Lmap = target_Lmap.view(-1, 3)
+    n,_=target_Lmap.shape
+    dotL=torch.sum(input_Lmap*target_Lmap.float(),1)
+    angle=torch.acos(dotL)
+
+
+    # calculate the angular error
+
+    return angle.mean()+sparse_weight*angle.var()
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -282,18 +296,38 @@ def validate(val_loader, mymodel, test_writers):
         batch_time.update(time.time() - end)
         end = time.time()
 
-
         if i % args.print_intervel == 0:
-            test_writers.add_image('test/Origin image', inputs['Imgs'][0][0], i)
-            test_writers.add_image('test/P_Light', inputs['P_L'][0], i)
-            test_writers.add_image('test/Ground truth light', target['light'][0], i)
-            test_writers.add_image('test/Predicted light', out_L.detach().cpu().numpy()[0][0], i)
+            out_L_show = out_L.detach().cpu().numpy()
+            out_L_show_ = out_L_show[0].reshape(-1, 3)
+            tar_L_show = target['light'].cpu().numpy()
+            tar_L_show_ = tar_L_show[0].reshape(-1, 3)
+
+            test_writers.add_image('train/Origin image', inputs['Imgs'][0][0], i)
+            test_writers.add_image('train/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
+            test_writers.add_image('train/Predicted light', CreatObservemapFromL(out_L_show_), i)
             print('Test: [{0}/{1}]\t Time {2}\t loss {3}'.format(i, len(val_loader), batch_time, loss_eval))
+
         print(' * loss in evaluation {:.3f}'.format(loss_eval.avg))
     return loss_eval.avg
 
 
+def CreatObservemapFromL(L=None, scale_size = 32):
+    # build observe map for light
 
+    if L is None:
+        raise RuntimeError("no light input")
+    if type(L) == list:
+        L=np.array(L)
+    P_observeMap = np.zeros([scale_size, scale_size],np.float)
+    for i in range(L.shape[0]):
+        x = int((L[i, 0] * 0.5 + 0.5) * (scale_size-2))
+        y = int((L[i, 1] * 0.5 + 0.5) * (scale_size-2))
+        z = (L[i, 2] * 0.5 + 0.5) * scale_size
+        if x>scale_size-1 or x<0 or y>scale_size-1 or y<0:
+            continue
+        P_observeMap[x, y] = z
+
+    return P_observeMap
 
 
 class AverageMeter(object):

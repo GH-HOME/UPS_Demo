@@ -39,7 +39,7 @@ def crop_like(input, target):
 
 class Upsnets(nn.Module):
 
-    def __init__(self,batchNorm=True,input_N=50):
+    def __init__(self,batchNorm=True,input_N=2000):
         super(Upsnets,self).__init__()
 
         self.batchNorm=batchNorm
@@ -49,26 +49,16 @@ class Upsnets(nn.Module):
         #self.conv1 = conv(self.batchNorm, 1, 64,kernel_size=7,stride=2)
 
         #non share weight
-        self.conv1 = conv(self.batchNorm, input_N, 64, kernel_size=7, stride=2)
-
+        self.conv1 = conv(self.batchNorm, input_N, 64, kernel_size=7, stride=1)
         self.conv2 = conv(self.batchNorm, 64, 128, kernel_size=5, stride=1)
-        self.conv3 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=2)
-        self.conv4 = conv(self.batchNorm, 256, 256, kernel_size=3, stride=1)
+        self.conv3 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=1)
+        self.conv3_1 = conv(self.batchNorm, 256, 256, kernel_size=3, stride=1)
+        self.conv4 = conv(self.batchNorm, 256, 512, kernel_size=3, stride=1)
+        self.conv4_1 = conv(self.batchNorm, 512, 512, kernel_size=3, stride=1)
         self.pool = nn.MaxPool2d(2, 2)
-
-        # for the normal line
-        self.deconv1=deconv(256,128)
-        self.deconv2 = deconv(128, 64)
-
-        self.convN_1=conv(False,67,1,kernel_size=1,stride=1)
-
-        self.fc1=nn.Linear(180*180,1024)
-        self.fc2=nn.Linear(1024,9)
-
-        # for the light line
-        self.convL_1=conv(self.batchNorm,256,128,kernel_size=3,stride=1)
-        # self.convL_2=conv(False,129,1,kernel_size=3,stride=1)
-        self.convL_2 = conv(False, 128, 1, kernel_size=3, stride=1)
+        self.convN_1 = conv(False, 512, 3, kernel_size=1, stride=1)
+        self.fc_l1=nn.Linear(3*8*8,64)
+        self.fc_l2 = nn.Linear(64, input_N*3)
 
         for m in self.modules():
             if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d):
@@ -80,54 +70,14 @@ class Upsnets(nn.Module):
                     m.bias.data.zero_()
 
     def forward(self, inputs):
-        # here x is a P*P*C matrix normalized to (0-1) C is the light number, P is the shape
-        # the data structure is [N C H W]
+        images = inputs['Imgs']
 
-        # we first calculate the Pseudo normal and light
-        images, P_L, P_N, mask=inputs['Imgs'], inputs['P_L'], inputs['P_N'], inputs['mask']
-        P_L=torch.unsqueeze(P_L,1)
-        #P_N=P_N.permute([3,0,1,2]) #这里维度顺序还是不对
-        N, C, _, _ = images.shape
-        # out_encoder=torch.zeros([N,C,256,32,32])
-        # for i in range(C):
-        #     #encoder part
-        #     image_Ci=torch.unsqueeze(images[:,i,:,:],1).float()
-        #     out_conv2 = self.conv2(self.conv1(image_Ci))
-        #     out_conv4 = self.conv4(self.conv3(out_conv2))
-        #     out_encoder[:,i,:,:,:].data=out_conv4.clone()
-        # #for share weight and merge
-        # out_conv4_cpu=torch.max(out_encoder,1)[0]
-        # out_conv4 = out_conv4_cpu.type(torch.cuda.FloatTensor)
-
-        out_conv2 = self.conv2(self.conv1(images.float()))
-        out_conv4 = self.conv4(self.conv3(out_conv2))
-
-
-        #light line
-        out_deconv_L1=self.convL_1(out_conv4)
-
-        # concat the pesudo light
-        # out_deconv_L2=torch.cat([out_deconv_L1,P_L.float()],1)
-        # out_L=self.convL_2(out_deconv_L2)
-
-        # without concating pesudo light
-        out_L = self.convL_2(out_deconv_L1)
-
-        #normal line
-        # out_deconv_N=self.deconv2(self.deconv1(out_conv4))
-        # mask=torch.squeeze(mask)
-        # for i in range(mask.shape[0]):
-        #     for j in range(mask.shape[1]):
-        #         if mask[i,j]==0:
-        #             out_deconv_N[:,:,i,j]=0
-        # print('4')
-        # out_deconv_N=self.convN_1(torch.cat([out_deconv_N,P_N.float()],1))
-        # print('5')
-        # # estimate ambiguity matrix
-        # out_deconv_N_flat=out_deconv_N.view(-1, num_flat_features(out_deconv_N))
-        # print('6')
-        # out_AM=self.fc2(self.fc1(out_deconv_N_flat))
-        # print('7')
+        out_conv2 = self.pool(self.conv2(self.pool(self.conv1(images.float()))))
+        out_conv3 = self.conv3_1(self.pool(self.conv3(out_conv2)))
+        out_conv_img = self.convN_1(self.conv4_1(self.pool(self.conv4(out_conv3))))
+        out_conv_img_flat = out_conv_img.view(-1, num_flat_features(out_conv_img))
+        out_L = self.fc_l2(self.fc_l1(out_conv_img_flat))
+        out_L = out_L.view(2,-1,3)
 
         return out_L
 

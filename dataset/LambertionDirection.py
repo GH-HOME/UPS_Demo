@@ -22,16 +22,13 @@ def make_dataset(dir, split=None, lightSampleNum=50, ChoiseTime=100):
             image_list=sorted(glob.glob(os.path.join(path,'*_L_*.png')))
             if(len(image_list) != Light.shape[0]):
                 raise RuntimeError("light num is not equal to rendered image num")
-            mask_path=glob.glob(os.path.join(path,'*_M.png'))
-            normal_path = glob.glob(os.path.join(path, '*_N.txt'))
-
 
             for i in range(ChoiseTime):
                 index_sample=random.sample(index,lightSampleNum)
                 subImagepath=[]
                 Light_sample = []
                 [(subImagepath.append(image_list[j]), Light_sample.append(Light[j])) for j in index_sample]
-                images.append([subImagepath,Light_sample, mask_path, normal_path])
+                images.append([subImagepath,Light_sample])
 
     return split2list(images, split, default_split=0.9)
 

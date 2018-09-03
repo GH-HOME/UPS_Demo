@@ -33,11 +33,9 @@ class ArrayToTensor(object):
 
     def __call__(self, inputs, targets):
         inputs['Imgs'] = torch.from_numpy(np.array(inputs['Imgs']))
-        inputs['P_L'] = torch.from_numpy(np.array(inputs['P_L']))
-        inputs['P_N'] = torch.from_numpy(np.array(inputs['P_N']))
-        inputs['mask'] = torch.from_numpy(np.array(inputs['mask']))
+
         targets['light']=torch.from_numpy(np.array(targets['light']))
-        targets['normal'] = torch.from_numpy(np.array(targets['normal']))
+
         return inputs, targets
 
 
@@ -72,10 +70,6 @@ class CenterCrop(object):
         y1 = int(round((h1 - th) / 2.))
 
         inputs['Imgs'] = inputs['Imgs'][:, y1: y1 + th, x1: x1 + tw]
-        inputs['P_N']=inputs['P_N'][y1: y1 + th, x1: x1 + tw,:]
-        inputs['mask'] = inputs['mask'][y1: y1 + th, x1: x1 + tw]
-
-        targets['normal'] = targets['normal'][y1: y1 + th, x1: x1 + tw,:]
         return inputs, targets
 
 

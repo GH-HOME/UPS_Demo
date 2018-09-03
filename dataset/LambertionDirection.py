@@ -29,8 +29,9 @@ def make_dataset(dir, split=None, lightSampleNum=50, ChoiseTime=200):
                 Light_sample = []
                 [(subImagepath.append(image_list[j]), Light_sample.append(Light[j])) for j in index_sample]
                 images.append([subImagepath,Light_sample])
+        return split2list(images, split, default_split=0.9)
 
-    return split2list(images, split, default_split=0.9)
+    #return split2list(images, split, default_split=0.9)
 
 
 def Lambertian_direction(root, transform=None, target_transform=None,

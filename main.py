@@ -66,14 +66,14 @@ parser.add_argument('--bias-decay', default=0, type=float,
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', dest='pretrained', default=None,
                     help='path to pre-trained model')
-parser.add_argument('--print_intervel',  default=100,
+parser.add_argument('--print_intervel',  default=20,
                     help='the iter interval for save the model')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 
 best_EPE = -1
 n_iter = 0
 Light_num=50
-ChoiseTime=2000
+ChoiseTime=8000
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"

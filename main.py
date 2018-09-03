@@ -34,7 +34,7 @@ group.add_argument('-s', '--split-file', default=None, type=str,
 group.add_argument('--split-value', default=0.8, type=float,
                    help='test-val split proportion (between 0 (only test) and 1 (only train))')
 
-parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets',
+parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets_bn',
                     choices=model_names,
                     help='model architecture, overwritten if pretrained is specified: ' +
                     ' | '.join(model_names))
@@ -48,9 +48,9 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=6, type=int,
+parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=0.6, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=0.3, type=float,
                     metavar='W', help='weight for control sparsity in loss')
 parser.add_argument('--lr', '--learning-rate', default=1e-6, type=float,
                     metavar='LR', help='initial learning rate')
@@ -113,7 +113,7 @@ def main():
                                                                            len(test_set)))
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=args.batch_size,
-        num_workers=args.workers, pin_memory=True, shuffle=False)
+        num_workers=args.workers, pin_memory=True, shuffle=True)
     val_loader = torch.utils.data.DataLoader(
         test_set, batch_size=args.batch_size,
         num_workers=args.workers, pin_memory=True, shuffle=False)
@@ -211,9 +211,10 @@ def train(train_loader, mymodel,optimizer, epoch, train_writer):
 def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight):
     input_Lmap=input_Lmap.squeeze()
     target_Lmap = target_Lmap.squeeze()
+    n,w,h=target_Lmap.shape
     Nonzero_tar, batch=torch.nonzero(target_Lmap).shape
     Nonzero_input, batch = torch.nonzero(input_Lmap).shape
-    sparsity=np.abs(Nonzero_tar-Nonzero_input)/batch
+    sparsity=np.abs(Nonzero_tar-Nonzero_input)/(batch*w*h)
     return torch.norm(input_Lmap-target_Lmap.float()).mean()+sparse_weight*sparsity
 
 

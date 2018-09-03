@@ -8,7 +8,7 @@ import os
 import tqdm
 
 
-def make_dataset(dir, split=None, lightSampleNum=50, ChoiseTime=1000):
+def make_dataset(dir, split=None, lightSampleNum=50, ChoiseTime=100):
     images = []
 
     light_path=glob.glob(os.path.join(dir,'*gt.txt'))

@@ -48,9 +48,9 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=8, type=int,
+parser.add_argument('-b', '--batch-size', default=4, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=0.3, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
 parser.add_argument('--lr', '--learning-rate', default=1e-6, type=float,
                     metavar='LR', help='initial learning rate')
@@ -65,6 +65,8 @@ parser.add_argument('--bias-decay', default=0, type=float,
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', dest='pretrained', default=None,
                     help='path to pre-trained model')
+parser.add_argument('--print_intervel',  default=100,
+                    help='the iter interval for save the model')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 
 best_EPE = -1
@@ -93,6 +95,10 @@ def main():
 
     train_writer=SummaryWriter(os.path.join(save_path,'train'))
     test_writer = SummaryWriter(os.path.join(save_path, 'test'))
+
+    output_writers = []
+    for i in range(3):
+        output_writers.append(SummaryWriter(os.path.join(save_path, 'test', str(i))))
 
     input_transform = image_transforms.Compose([
         image_transforms.ArrayToTensor(),
@@ -145,9 +151,26 @@ def main():
     for epoch in range(args.start_epoch, args.epochs):
         scheduler.step()
         train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
+        train_writer.add_scalar('mean loss in train epoch', train_loss, epoch)
+
+        # eval_loss = validate(val_loader, mymodel, test_writer)
+        # test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
+        #
+        # if eval_loss < 0:
+        #     best_EPE = eval_loss
+        #
+        # is_best = eval_loss < best_EPE
+        # best_EPE = min(eval_loss, best_EPE)
+        # save_checkpoint({
+        #     'epoch': epoch + 1,
+        #     'arch': args.arch,
+        #     'state_dict': mymodel.module.state_dict(),
+        #     'best_EPE': best_EPE
+        # }, is_best)
 
 
-def train(train_loader, mymodel,optimizer, epoch, train_writer):
+
+def train(train_loader, mymodel, optimizer, epoch, train_writer):
     global n_iter, args
     batch_time= AverageMeter()
     data_time=AverageMeter()
@@ -201,12 +224,19 @@ def train(train_loader, mymodel,optimizer, epoch, train_writer):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % 20 == 0:
+        if i % args.print_intervel == 0:
             print('Epoch: [{0}][{1}/{2}]\t Time {3}\t Data {4}\t Loss {5}\t '.format(epoch, i, epoch_size, batch_time, data_time, losses))
+            train_writer.add_image('train/Origin image', inputs['Imgs'][0][0],i)
+            train_writer.add_image('train/P_Light', inputs['P_L'][0], i)
+            train_writer.add_image('train/Ground truth light', target['light'][0], i)
+            train_writer.add_image('train/Predicted light', out_L.detach().cpu().numpy()[0][0], i)
+
+
 
         if i >= epoch_size:
             break
     return losses.avg
+
 
 def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight):
     input_Lmap=input_Lmap.squeeze()
@@ -216,6 +246,52 @@ def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight):
     Nonzero_input, batch = torch.nonzero(input_Lmap).shape
     sparsity=np.abs(Nonzero_tar-Nonzero_input)/(batch*w*h)
     return torch.norm(input_Lmap-target_Lmap.float()).mean()+sparse_weight*sparsity
+
+
+def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+    torch.save(state, os.path.join(save_path,filename))
+    if is_best:
+        shutil.copyfile(os.path.join(save_path,filename), os.path.join(save_path,'model_best.pth.tar'))
+
+
+def validate(val_loader, mymodel, test_writers):
+    global args
+
+    batch_time = AverageMeter()
+    loss_eval = AverageMeter()
+
+    # switch to evaluate mode
+    mymodel.eval()
+
+    end = time.time()
+    for i, (inputs, target) in enumerate(val_loader):
+        input_var = inputs
+        target_var = target
+        for item in inputs.keys():
+            input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
+        for item in target.keys():
+            target_var[item] = torch.autograd.Variable(target[item]).cuda()
+        out_L = mymodel(input_var)
+
+        lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight)
+
+        loss_eval.update(lossL)
+        test_writers.add_scalar('test_loss', lossL.data[0], i)
+        # measure elapsed time
+
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+
+        if i % args.print_intervel == 0:
+            test_writers.add_image('test/Origin image', inputs['Imgs'][0][0], i)
+            test_writers.add_image('test/P_Light', inputs['P_L'][0], i)
+            test_writers.add_image('test/Ground truth light', target['light'][0], i)
+            test_writers.add_image('test/Predicted light', out_L.detach().cpu().numpy()[0][0], i)
+            print('Test: [{0}/{1}]\t Time {2}\t loss {3}'.format(i, len(val_loader), batch_time, loss_eval))
+        print(' * loss in evaluation {:.3f}'.format(loss_eval.avg))
+    return loss_eval.avg
+
 
 
 

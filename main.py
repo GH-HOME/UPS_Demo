@@ -49,11 +49,11 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=8, type=int,
+parser.add_argument('-b', '--batch-size', default=4, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=0.9, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=1e-6, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-5, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -73,8 +73,11 @@ parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*
 best_EPE = -1
 n_iter = 0
 Light_num=50
+ChoiseTime=2000
 
 def main():
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
     global args, best_EPE, save_path
     args=parser.parse_args()
     save_path='{},{},{}epochs{},b{},lr{}'.format(
@@ -113,7 +116,8 @@ def main():
         args.datadir,
         transform=input_transform,
         split=args.split_file if args.split_file else args.split_value,
-        light_num=Light_num
+        light_num=Light_num,
+        ChoiseTime=ChoiseTime
     )
     print('{} samples found, {} train samples and {} test samples '.format(len(test_set) + len(train_set),
                                                                            len(train_set),
@@ -172,6 +176,7 @@ def main():
 
 def train(train_loader, mymodel, optimizer, epoch, train_writer):
     global n_iter, args
+
     batch_time= AverageMeter()
     data_time=AverageMeter()
     losses=AverageMeter()
@@ -213,8 +218,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         # plt.imshow(out_L_show[0][0])
         # plt.show()
 
-        lossL=calculateLoss_L(out_L,target_var['light'],args.sparse_weight)
-
+        lossL=calculateLoss_L(out_L,target_var['light'],args.sparse_weight,'L2')
         losses.update(lossL.data[0])
         train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
         n_iter+=1
@@ -240,26 +244,28 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
     return losses.avg
 
 
-def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight):
+def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
     input_Lmap=input_Lmap.squeeze()
     input_Lmap_norm=torch.norm(input_Lmap,2,2)
     target_Lmap = target_Lmap.squeeze()
 
     input_Lmap_norm=input_Lmap_norm.view(-1).unsqueeze(1)
-
     input_Lmap_norm=input_Lmap_norm.repeat(1,3)
 
     input_Lmap = input_Lmap.view(-1,3)
     input_Lmap=input_Lmap/input_Lmap_norm
     target_Lmap = target_Lmap.view(-1, 3)
     n,_=target_Lmap.shape
-    dotL=torch.sum(input_Lmap*target_Lmap.float(),1)
-    angle=torch.acos(dotL)
 
+    if type=='L2':
+        return torch.norm(input_Lmap - target_Lmap.float())
+    elif type == 'angular':
+        dotL=torch.sum(input_Lmap*target_Lmap.float(),1)
+        angle=torch.acos(dotL)
+        return angle.mean()+sparse_weight*angle.var()
+    else:
+        raise RuntimeError("no loss type")
 
-    # calculate the angular error
-
-    return angle.mean()+sparse_weight*angle.var()
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -278,36 +284,39 @@ def validate(val_loader, mymodel, test_writers):
     mymodel.eval()
 
     end = time.time()
-    for i, (inputs, target) in enumerate(val_loader):
-        input_var = inputs
-        target_var = target
-        for item in inputs.keys():
-            input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
-        for item in target.keys():
-            target_var[item] = torch.autograd.Variable(target[item]).cuda()
-        out_L = mymodel(input_var)
+    with torch.no_grad():
+        for i, (inputs, target) in enumerate(val_loader):
+            input_var = inputs
+            target_var = target
+            for item in inputs.keys():
+                input_var[item] = torch.autograd.Variable(inputs[item].cuda())
+            for item in target.keys():
+                target_var[item] = torch.autograd.Variable(target[item].cuda())
+            out_L = mymodel(input_var)
 
-        lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight)
+            lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,'L2')
 
-        loss_eval.update(lossL)
-        test_writers.add_scalar('test_loss', lossL.data[0], i)
-        # measure elapsed time
+            loss_eval.update(lossL)
+            test_writers.add_scalar('test_loss', lossL.data[0], i)
+            # measure elapsed time
 
-        batch_time.update(time.time() - end)
-        end = time.time()
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-        if i % args.print_intervel == 0:
-            out_L_show = out_L.detach().cpu().numpy()
-            out_L_show_ = out_L_show[0].reshape(-1, 3)
-            tar_L_show = target['light'].cpu().numpy()
-            tar_L_show_ = tar_L_show[0].reshape(-1, 3)
+            if i % args.print_intervel == 0:
+                out_L_show = out_L.detach().cpu().numpy()
+                out_L_show_ = out_L_show[0].reshape(-1, 3)
+                tar_L_show = target['light'].cpu().numpy()
+                tar_L_show_ = tar_L_show[0].reshape(-1, 3)
 
-            test_writers.add_image('train/Origin image', inputs['Imgs'][0][0], i)
-            test_writers.add_image('train/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
-            test_writers.add_image('train/Predicted light', CreatObservemapFromL(out_L_show_), i)
-            print('Test: [{0}/{1}]\t Time {2}\t loss {3}'.format(i, len(val_loader), batch_time, loss_eval))
+                test_writers.add_image('test/Origin image', inputs['Imgs'][0][0], i)
+                test_writers.add_image('test/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
+                test_writers.add_image('test/Predicted light', CreatObservemapFromL(out_L_show_), i)
+                #print('Test: [{0}/{1}]\t Time {2}\t loss {3}'.format(i, len(val_loader), batch_time, loss_eval))
 
-        print(' * loss in evaluation {:.3f}'.format(loss_eval.avg))
+
+    print(' * loss in evaluation {:.3f}'.format(loss_eval.avg))
+    torch.cuda.empty_cache()
     return loss_eval.avg
 
 

@@ -8,7 +8,7 @@ import os
 import tqdm
 
 
-def make_dataset(dir, split=None, lightSampleNum=50, ChoiseTime=100):
+def make_dataset(dir, split=None, lightSampleNum=50, ChoiseTime=200):
     images = []
 
     light_path=glob.glob(os.path.join(dir,'*gt.txt'))
@@ -34,8 +34,8 @@ def make_dataset(dir, split=None, lightSampleNum=50, ChoiseTime=100):
 
 
 def Lambertian_direction(root, transform=None, target_transform=None,
-                  co_transform=None, split=None,light_num=50):
-    train_list, test_list = make_dataset(root,split,lightSampleNum=light_num)
+                  co_transform=None, split=None,light_num=50,ChoiseTime=200):
+    train_list, test_list = make_dataset(root,split,lightSampleNum=light_num,ChoiseTime=ChoiseTime)
     train_dataset = ListDataset(root, train_list, transform, target_transform, co_transform)
     test_dataset = ListDataset(root, test_list, transform, target_transform)
 

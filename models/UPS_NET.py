@@ -39,7 +39,7 @@ def crop_like(input, target):
 
 class Upsnets(nn.Module):
 
-    def __init__(self,batchNorm=True,input_N=2000):
+    def __init__(self,batchNorm=True,input_N=50):
         super(Upsnets,self).__init__()
 
         self.batchNorm=batchNorm

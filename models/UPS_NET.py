@@ -69,7 +69,7 @@ class Upsnets(nn.Module):
                     m.weight.data.fill_(1)
                     m.bias.data.zero_()
 
-    def forward(self, inputs):
+    def forward(self, inputs,train_writer=None):
         images = inputs['Imgs']
 
         out_conv2 = self.pool(self.conv2(self.pool(self.conv1(images.float()))))
@@ -78,6 +78,11 @@ class Upsnets(nn.Module):
         out_conv_img_flat = out_conv_img.view(-1, num_flat_features(out_conv_img))
         out_L = self.fc_l2(self.fc_l1(out_conv_img_flat))
         out_L = out_L.view(2,-1,3)
+
+        if train_writer is not None:
+            train_writer.add_image('Internel/out_conv2', out_conv2.detach().cpu().numpy()[0,0,:,:])
+            train_writer.add_image('Internel/out_conv3', out_conv3.detach().cpu().numpy()[0,0,:,:])
+            train_writer.add_image('Internel/out_conv_img', out_conv_img.detach().cpu().numpy()[0,0,:,:])
 
         return out_L
 

@@ -17,6 +17,7 @@ import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
 import math
+from viz_net_pytorch import make_dot
 
 model_names=sorted(name for name in models.__dict__
                    if name.islower() and not name.startswith("__"))
@@ -74,6 +75,7 @@ best_EPE = -1
 n_iter = 0
 Light_num=50
 ChoiseTime=8000
+losstype='angular'
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -88,6 +90,7 @@ def main():
         args.batch_size,
         args.lr
     )
+
 
     if not args.no_date:
         timestamp=datetime.datetime.now().strftime("%m_%d_%H_%M")
@@ -155,23 +158,26 @@ def main():
 
     for epoch in range(args.start_epoch, args.epochs):
         scheduler.step()
+
+        if epoch>5:
+            args.sparse_weight = 0.0
         train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
         train_writer.add_scalar('mean loss in train epoch', train_loss, epoch)
 
-        eval_loss = validate(val_loader, mymodel, test_writer)
-        test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
-
-        if eval_loss < 0:
-            best_EPE = eval_loss
-
-        is_best = eval_loss < best_EPE
-        best_EPE = min(eval_loss, best_EPE)
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'arch': args.arch,
-            'state_dict': mymodel.module.state_dict(),
-            'best_EPE': best_EPE
-        }, is_best)
+        # eval_loss = validate(val_loader, mymodel, test_writer)
+        # test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
+        #
+        # if eval_loss < 0:
+        #     best_EPE = eval_loss
+        #
+        # is_best = eval_loss < best_EPE
+        # best_EPE = min(eval_loss, best_EPE)
+        # save_checkpoint({
+        #     'epoch': epoch + 1,
+        #     'arch': args.arch,
+        #     'state_dict': mymodel.module.state_dict(),
+        #     'best_EPE': best_EPE
+        # }, is_best)
 
 
 def train(train_loader, mymodel, optimizer, epoch, train_writer):
@@ -210,7 +216,9 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
             input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
         for item in target.keys():
             target_var[item]  = torch.autograd.Variable(target[item]).cuda()
-        out_L=mymodel(input_var)
+        out_L=mymodel(input_var,train_writer)
+
+
 
         #plot the output data
         # plt.title('output light image')
@@ -218,9 +226,10 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         # plt.imshow(out_L_show[0][0])
         # plt.show()
 
-        lossL=calculateLoss_L(out_L,target_var['light'],args.sparse_weight,'L2')
+        lossL, varL=calculateLoss_L(out_L,target_var['light'],args.sparse_weight,losstype)
         losses.update(lossL.data[0])
         train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
+        train_writer.add_scalar('var Light', varL.data[0], n_iter)
         n_iter+=1
         optimizer.zero_grad()
         lossL.backward()
@@ -247,7 +256,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
 def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
     input_Lmap=input_Lmap.squeeze()
     input_Lmap_norm=torch.norm(input_Lmap,2,2)
-    target_Lmap = target_Lmap.squeeze()
+    target_Lmap = target_Lmap.squeeze().float()
 
     input_Lmap_norm=input_Lmap_norm.view(-1).unsqueeze(1)
     input_Lmap_norm=input_Lmap_norm.repeat(1,3)
@@ -258,11 +267,15 @@ def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
     n,_=target_Lmap.shape
 
     if type=='L2':
-        return torch.norm(input_Lmap - target_Lmap.float())
+        var_x=input_Lmap[:,0].var()-target_Lmap[:,0].var()
+        var_y = input_Lmap[:, 1].var() - target_Lmap[:, 1].var()
+        var_z = input_Lmap[:, 2].var() - target_Lmap[:, 2].var()
+        lossfn=torch.nn.MSELoss()
+        return lossfn(input_Lmap, target_Lmap)+(var_x+var_y+var_z)/n
     elif type == 'angular':
-        dotL=torch.sum(input_Lmap*target_Lmap.float(),1)
-        angle=torch.acos(dotL)
-        return angle.mean()+sparse_weight*angle.var()
+        diffangle_cos=torch.abs(1-torch.sum(input_Lmap*target_Lmap.float(),1))
+        var_input_cos = torch.mm(input_Lmap,input_Lmap.t())
+        return [(diffangle_cos.mean())+sparse_weight/(var_input_cos.var()), var_input_cos.var()]
     else:
         raise RuntimeError("no loss type")
 
@@ -294,7 +307,7 @@ def validate(val_loader, mymodel, test_writers):
                 target_var[item] = torch.autograd.Variable(target[item].cuda())
             out_L = mymodel(input_var)
 
-            lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,'L2')
+            lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,losstype)
 
             loss_eval.update(lossL)
             test_writers.add_scalar('test_loss', lossL.data[0], i)

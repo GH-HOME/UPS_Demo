@@ -71,13 +71,24 @@ class Upsnets(nn.Module):
 
     def forward(self, inputs,train_writer=None):
         images = inputs['Imgs']
-
+        Batch_size, Light_num, w,h =images.shape
         out_conv2 = self.pool(self.conv2(self.pool(self.conv1(images.float()))))
         out_conv3 = self.conv3_1(self.pool(self.conv3(out_conv2)))
         out_conv_img = self.convN_1(self.conv4_1(self.pool(self.conv4(out_conv3))))
         out_conv_img_flat = out_conv_img.view(-1, num_flat_features(out_conv_img))
         out_L = self.fc_l2(self.fc_l1(out_conv_img_flat))
-        out_L = out_L.view(2,-1,3)
+        out_L = out_L.view(Batch_size,-1,3)
+
+        out_L = out_L.squeeze()
+        out_L_norm = torch.norm(out_L, 2, 2)
+
+        out_L_norm = out_L_norm.view(-1).unsqueeze(1)
+        out_L_norm = out_L_norm.repeat(1, 3)
+
+        out_L = out_L.view(-1, 3)
+        out_L = out_L / out_L_norm
+        out_L = out_L.view(Batch_size, -1, 3)
+
 
         if train_writer is not None:
             train_writer.add_image('Internel/out_conv2', out_conv2.detach().cpu().numpy()[0,0,:,:])

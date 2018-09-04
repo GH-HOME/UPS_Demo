@@ -42,7 +42,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets_bn',
                     ' | '.join(model_names))
 parser.add_argument('--solver', default='adam',choices=['adam','sgd'],
                     help='solver algorithms')
-parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers')
 parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -50,11 +50,11 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=4, type=int,
+parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=0.9, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=1, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=1e-5, type=float,
+parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -67,18 +67,19 @@ parser.add_argument('--bias-decay', default=0, type=float,
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', dest='pretrained', default=None,
                     help='path to pre-trained model')
-parser.add_argument('--print_intervel',  default=20,
+parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 
 best_EPE = -1
 n_iter = 0
-Light_num=50
-ChoiseTime=8000
+Light_num=30
+ChoiseTime=5000
 losstype='angular'
 
+
 def main():
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    #os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
     global args, best_EPE, save_path
     args=parser.parse_args()
@@ -159,25 +160,30 @@ def main():
     for epoch in range(args.start_epoch, args.epochs):
         scheduler.step()
 
-        if epoch>5:
-            args.sparse_weight = 0.0
+        # epoch_adjust_size=12
+        # if epoch>epoch_adjust_size:
+        #     args.sparse_weight = 0.0
+        # else:
+        #     args.sparse_weight-epoch*0.08
         train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
         train_writer.add_scalar('mean loss in train epoch', train_loss, epoch)
 
-        # eval_loss = validate(val_loader, mymodel, test_writer)
-        # test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
-        #
-        # if eval_loss < 0:
-        #     best_EPE = eval_loss
-        #
-        # is_best = eval_loss < best_EPE
-        # best_EPE = min(eval_loss, best_EPE)
-        # save_checkpoint({
-        #     'epoch': epoch + 1,
-        #     'arch': args.arch,
-        #     'state_dict': mymodel.module.state_dict(),
-        #     'best_EPE': best_EPE
-        # }, is_best)
+        eval_loss = validate(val_loader, mymodel, test_writer)
+        test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
+
+        if eval_loss < 0:
+            best_EPE = eval_loss
+
+        is_best = eval_loss < best_EPE
+        best_EPE = min(eval_loss, best_EPE)
+        save_checkpoint({
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'state_dict': mymodel.module.state_dict(),
+            'best_EPE': best_EPE
+        }, is_best)
+
+        print('=> save model for epoch {}'.format(epoch))
 
 
 def train(train_loader, mymodel, optimizer, epoch, train_writer):
@@ -186,7 +192,6 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
     batch_time= AverageMeter()
     data_time=AverageMeter()
     losses=AverageMeter()
-    Acc=AverageMeter()
 
     epoch_size=len(train_loader) if args.epoch_size==0 else min(len(train_loader),args.epoch_size)
 
@@ -226,10 +231,9 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         # plt.imshow(out_L_show[0][0])
         # plt.show()
 
-        lossL, varL=calculateLoss_L(out_L,target_var['light'],args.sparse_weight,losstype)
+        lossL =calculateLoss_L(out_L,target_var['light'],args.sparse_weight,losstype)
         losses.update(lossL.data[0])
         train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
-        train_writer.add_scalar('var Light', varL.data[0], n_iter)
         n_iter+=1
         optimizer.zero_grad()
         lossL.backward()
@@ -254,28 +258,26 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
 
 
 def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
-    input_Lmap=input_Lmap.squeeze()
-    input_Lmap_norm=torch.norm(input_Lmap,2,2)
+
+    input_Lmap = input_Lmap.view(-1,3).float()
+
     target_Lmap = target_Lmap.squeeze().float()
-
-    input_Lmap_norm=input_Lmap_norm.view(-1).unsqueeze(1)
-    input_Lmap_norm=input_Lmap_norm.repeat(1,3)
-
-    input_Lmap = input_Lmap.view(-1,3)
-    input_Lmap=input_Lmap/input_Lmap_norm
     target_Lmap = target_Lmap.view(-1, 3)
     n,_=target_Lmap.shape
 
     if type=='L2':
-        var_x=input_Lmap[:,0].var()-target_Lmap[:,0].var()
-        var_y = input_Lmap[:, 1].var() - target_Lmap[:, 1].var()
-        var_z = input_Lmap[:, 2].var() - target_Lmap[:, 2].var()
+        mean_vec = torch.mean(input_Lmap, 0).repeat(n, 1)
+        diff_vec = input_Lmap - mean_vec
+        distance = torch.sqrt(torch.sum(diff_vec * diff_vec, 1))
         lossfn=torch.nn.MSELoss()
-        return lossfn(input_Lmap, target_Lmap)+(var_x+var_y+var_z)/n
+        return lossfn(input_Lmap, target_Lmap)+sparse_weight/distance.mean()
     elif type == 'angular':
         diffangle_cos=torch.abs(1-torch.sum(input_Lmap*target_Lmap.float(),1))
-        var_input_cos = torch.mm(input_Lmap,input_Lmap.t())
-        return [(diffangle_cos.mean())+sparse_weight/(var_input_cos.var()), var_input_cos.var()]
+        mean_vec=torch.mean(input_Lmap,0).repeat(n,1)
+        diff_vec=input_Lmap-mean_vec
+        distance=torch.sqrt(torch.sum(diff_vec * diff_vec,1))
+
+        return (diffangle_cos.mean()+diffangle_cos.var())+sparse_weight/(distance.mean())
     else:
         raise RuntimeError("no loss type")
 

@@ -1,3 +1,4 @@
+
 import argparse
 import  os
 import shutil
@@ -52,7 +53,7 @@ parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
 parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=1, type=float,
                     metavar='W', help='weight for control sparsity in loss')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float,
                     metavar='LR', help='initial learning rate')
@@ -74,8 +75,8 @@ parser.add_argument('--milestones', default=[10,40,80], metavar='N', nargs='*', 
 best_EPE = -1
 n_iter = 0
 Light_num=30
-ChoiseTime=5000
-losstype='L2'
+ChoiseTime=2000
+losstype='angular'
 
 
 def main():
@@ -161,26 +162,30 @@ def main():
     for epoch in range(args.start_epoch, args.epochs):
         scheduler.step()
 
-
+        epoch_adjust_size=12
+        if epoch>epoch_adjust_size:
+            args.sparse_weight = 0.0
+        else:
+            args.sparse_weight-=epoch*0.08
         train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
         train_writer.add_scalar('mean loss in train epoch', train_loss, epoch)
 
-        # eval_loss = validate(val_loader, mymodel, test_writer)
-        # test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
-        #
-        # if eval_loss < 0:
-        #     best_EPE = eval_loss
-        #
-        # is_best = eval_loss < best_EPE
-        # best_EPE = min(eval_loss, best_EPE)
-        # save_checkpoint({
-        #     'epoch': epoch + 1,
-        #     'arch': args.arch,
-        #     'state_dict': mymodel.module.state_dict(),
-        #     'best_EPE': best_EPE
-        # }, is_best)
-        #
-        # print('=> save model for epoch {}'.format(epoch))
+        eval_loss = validate(val_loader, mymodel, test_writer)
+        test_writer.add_scalar('mean loss in test epoch', eval_loss, epoch)
+
+        if eval_loss < 0:
+            best_EPE = eval_loss
+
+        is_best = eval_loss < best_EPE
+        best_EPE = min(eval_loss, best_EPE)
+        save_checkpoint({
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'state_dict': mymodel.module.state_dict(),
+            'best_EPE': best_EPE
+        }, is_best)
+
+        print('=> save model for epoch {}'.format(epoch))
 
 
 def train(train_loader, mymodel, optimizer, epoch, train_writer):

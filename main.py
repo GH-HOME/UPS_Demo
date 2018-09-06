@@ -17,7 +17,7 @@ import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
 import math
-from viz_net_pytorch import make_dot
+import mydraw
 
 model_names=sorted(name for name in models.__dict__
                    if name.islower() and not name.startswith("__"))
@@ -50,9 +50,9 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=16, type=int,
+parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=1, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
 parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float,
                     metavar='LR', help='initial learning rate')
@@ -70,6 +70,9 @@ parser.add_argument('--pretrained', dest='pretrained', default=None,
 parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
+parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
+                    help='evaluate model on validation set')
+
 
 best_EPE = -1
 n_iter = 0
@@ -92,6 +95,8 @@ def main():
         args.lr
     )
 
+    args.pretrained='./Lambertian_direction/09_04_19_40_save/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/checkpoint.pth.tar'
+    args.evaluate=True
 
     if not args.no_date:
         timestamp=datetime.datetime.now().strftime("%m_%d_%H_%M")
@@ -103,10 +108,6 @@ def main():
 
     train_writer=SummaryWriter(os.path.join(save_path,'train'))
     test_writer = SummaryWriter(os.path.join(save_path, 'test'))
-
-    output_writers = []
-    for i in range(3):
-        output_writers.append(SummaryWriter(os.path.join(save_path, 'test', str(i))))
 
     input_transform = image_transforms.Compose([
         image_transforms.ArrayToTensor(),
@@ -145,6 +146,7 @@ def main():
     mymodel=torch.nn.DataParallel(mymodel).cuda()
     cudnn.benchmark=True
 
+
     assert(args.solver in ['adam','sgd'])
     print('=> setting {} solver '.format(args.solver))
     param_groups =[{'params': mymodel.module.bias_parameters(), 'weight_decay': args.bias_decay},
@@ -156,6 +158,11 @@ def main():
         optimizer=torch.optim.SGD(param_groups,args.lr,args.momentum)
 
     scheduler= torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,gamma=0.5)
+
+    if args.evaluate:
+        eval_loss = validate(val_loader, mymodel, test_writer)
+        print(eval_loss.item())
+        return
 
     for epoch in range(args.start_epoch, args.epochs):
         scheduler.step()

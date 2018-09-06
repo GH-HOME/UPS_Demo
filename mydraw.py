@@ -29,7 +29,7 @@ class Arrow3D(FancyArrowPatch):
 
 def drawlightseq(Light):
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(25.,25.))
     ax = fig.gca(projection='3d')
     ax.set_aspect("equal")
 
@@ -40,7 +40,7 @@ def drawlightseq(Light):
     #         ax.plot3D(*zip(s, e), color="b")
 
     # draw sphere
-    u, v = np.mgrid[0:2 * np.pi:20j, 0:np.pi:10j]
+    u, v = np.mgrid[0:2 * np.pi:25j, 0:np.pi:10j]
     x = np.cos(u) * np.sin(v)
     y = np.sin(u) * np.sin(v)
     z = np.cos(v)
@@ -50,23 +50,26 @@ def drawlightseq(Light):
     ax.scatter([0], [0], [0], color="g", s=100)
 
     n, _ = Light.shape
-
+    #change view direction
+    ax.view_init(elev=90,azim=0)
     for i in range(n):
         lightvector=np.zeros([2,3],np.float)
         lightvector[1]=Light[i]
         a = Arrow3D(lightvector, mutation_scale=5,
-                    lw=1, arrowstyle="-|>", color="k")
+                    lw=3, arrowstyle="-|>", color="k")
         ax.add_artist(a)
+
 
     plt.show()
 
 
 if __name__ == '__main__':
     X = np.zeros([2,3],np.float)
-    X[1,0]=0.5
-    X[1,1]=0.5
-    X[1,2]=0.5
-    a = Arrow3D(X, mutation_scale=5,
-                lw=1, arrowstyle="-|>", color="k")
-    # ax.add_artist(a)
-    # plt.show()
+    X[1,0]=0.15519809
+    X[1,1]=0.09810481
+    X[1,2]=0.983
+    X[0, 0] = -0.07333659
+    X[0, 1] = -0.26413813
+    X[0, 2] = 0.96169275
+
+    drawlightseq(X)

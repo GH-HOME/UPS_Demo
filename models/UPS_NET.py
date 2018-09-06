@@ -56,12 +56,12 @@ class Upsnets(nn.Module):
         self.conv4 = conv(self.batchNorm, 256, 512, kernel_size=3, stride=1)
         self.conv4_1 = conv(self.batchNorm, 512, 512, kernel_size=3, stride=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.convN_1 = conv(False, 512, 3, kernel_size=1, stride=1)
+        self.convN_1 = conv(self.batchNorm, 512, 3, kernel_size=1, stride=1)
         self.fc_l1=nn.Linear(3*8*8,64)
         self.fc_l2 = nn.Linear(64, input_N*3)
 
         for m in self.modules():
-            if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d):
+            if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d) or isinstance(m,nn.Linear):
                 kaiming_normal(m.weight.data)
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -87,7 +87,7 @@ class Upsnets(nn.Module):
         out_L = self.fc_l2(self.fc_l1(out_conv_img_flat))
         out_L = out_L.view(Batch_size,-1,3)
 
-        #out_L = out_L.squeeze()
+        # out_L = out_L.squeeze()
         out_L_norm = torch.norm(out_L, 2, 2)
 
         out_L_norm = out_L_norm.view(-1).unsqueeze(1)

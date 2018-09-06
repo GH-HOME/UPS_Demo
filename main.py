@@ -65,12 +65,12 @@ parser.add_argument('--weight-decay', '--wd', default=4e-4, type=float,
 parser.add_argument('--bias-decay', default=0, type=float,
                     metavar='B', help='bias decay')
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
-parser.add_argument('--pretrained', dest='pretrained', default=None,
+parser.add_argument('--pretrained', dest='./Lambertian_direction/09_04_19_40_save/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/checkpoint.pth.tar', default=None,
                     help='path to pre-trained model')
 parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
-parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
+parser.add_argument('-e', '--evaluate', dest='evaluate',default=True, action='store_true',
                     help='evaluate model on validation set')
 
 
@@ -95,8 +95,6 @@ def main():
         args.lr
     )
 
-    args.pretrained='./Lambertian_direction/09_04_19_40_save/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/checkpoint.pth.tar'
-    args.evaluate=True
 
     if not args.no_date:
         timestamp=datetime.datetime.now().strftime("%m_%d_%H_%M")
@@ -325,7 +323,7 @@ def validate(val_loader, mymodel, test_writers):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i % args.print_intervel == 0:
+            if i % 2 == 0:
                 out_L_show = out_L.detach().cpu().numpy()
                 out_L_show_ = out_L_show[0].reshape(-1, 3)
                 tar_L_show = target['light'].cpu().numpy()

@@ -11,6 +11,7 @@ import tqdm
 import datetime
 import matplotlib.pyplot as plt
 from generateLight import LightGen
+import mydraw
 
 class UPSDataset(object):
     '''
@@ -25,7 +26,7 @@ class UPSDataset(object):
         self.datalist=[]  # data list text which used to load data
         self.originalNlist=[]
         self.albedo=1
-        self.total_Num = 500*2  # total light in the sphere, for the semi-sphere light, you need to *2
+        self.total_Num = 60*2  # total light in the sphere, for the semi-sphere light, you need to *2
 
 
         self.Light=[]
@@ -132,6 +133,10 @@ class UPSDataset(object):
             m_img = m_img.T.reshape(m, n, 3).astype(np.uint16)
             write_path=os.path.join(self.tardatasetdir, obj_name+"_L_{:0>4d}.png".format(l))
             self.datalist.append(write_path)
+
+            # cv2.imshow('',m_img[:, :, ::-1])
+            # cv2.waitKey()
+
             cv2.imwrite(write_path, m_img[:, :, ::-1])
 
 

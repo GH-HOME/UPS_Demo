@@ -57,6 +57,7 @@ class Upsnets(nn.Module):
 
         self.pool = nn.MaxPool2d(2, 2)
         self.relu = nn.ReLU(inplace=True)
+        self.dropout=nn.Dropout(0.5)
 
         self.convN_1 = conv(self.batchNorm, 256, 3, kernel_size=1, stride=1)
         self.fc_l1=nn.Linear(3*8*8,32)
@@ -86,8 +87,12 @@ class Upsnets(nn.Module):
 
         out_conv_img = self.convN_1(out_conv4_pool)
         out_conv_img_flat = out_conv_img.view(-1, num_flat_features(out_conv_img))
-        out_L = self.fc_l2(self.fc_l1(out_conv_img_flat))
+        out_Linear1 = self.fc_l1(out_conv_img_flat)
+        out_Linear1_drop = self.dropout(out_Linear1)
+        out_Linear1_drop_relu=self.relu(out_Linear1_drop)
+        out_L=self.fc_l2(out_Linear1_drop_relu)
         out_L = out_L.view(Batch_size,-1,3)
+
 
         # out_L = out_L.squeeze()
         out_L_norm = torch.norm(out_L, 2, 2)

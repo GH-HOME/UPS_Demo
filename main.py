@@ -50,9 +50,9 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=8, type=int,
+parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=0.45, type=float,
                     metavar='W', help='weight for control sparsity in loss')
 parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float,
                     metavar='LR', help='initial learning rate')
@@ -65,18 +65,20 @@ parser.add_argument('--weight-decay', '--wd', default=4e-4, type=float,
 parser.add_argument('--bias-decay', default=0, type=float,
                     metavar='B', help='bias decay')
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
-parser.add_argument('--pretrained', dest='./Lambertian_direction/09_04_19_40_save/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/checkpoint.pth.tar', default=None,
+parser.add_argument('--pretrained', default=None,
                     help='path to pre-trained model')
 parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
+parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
+                    help='draw model output in tensorboardX')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
-parser.add_argument('-e', '--evaluate', dest='evaluate',default=True, action='store_true',
+parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
 
 
 best_EPE = -1
 n_iter = 0
-Light_num=30
+Light_num=50
 ChoiseTime=5000
 losstype='angular'
 
@@ -219,6 +221,9 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         # plt.imshow(target['light'][0])
         # plt.show()
 
+        if i % args.print_intervel == 0:
+            args.drawflag=True
+
         data_time.update(time.time()-end)
         input_var=inputs
         target_var=target
@@ -226,9 +231,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
             input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
         for item in target.keys():
             target_var[item]  = torch.autograd.Variable(target[item]).cuda()
-        out_L=mymodel(input_var,train_writer)
-
-
+        out_L=mymodel(input_var,train_writer,args.drawflag)
 
         #plot the output data
         # plt.title('output light image')
@@ -246,7 +249,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_intervel == 0:
+        if args.drawflag:
             out_L_show=out_L.detach().cpu().numpy()
             out_L_show_=out_L_show[0].reshape(-1,3)
             tar_L_show=target['light'].cpu().numpy()
@@ -257,6 +260,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
             train_writer.add_image('train/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
             train_writer.add_image('train/Predicted light', CreatObservemapFromL(out_L_show_), i)
 
+        args.drawflag = False
         if i >= epoch_size:
             break
     return losses.avg
@@ -306,6 +310,10 @@ def validate(val_loader, mymodel, test_writers):
     end = time.time()
     with torch.no_grad():
         for i, (inputs, target) in enumerate(val_loader):
+
+            if i % args.print_intervel == 0:
+                args.drawflag=True
+
             input_var = inputs
             target_var = target
             for item in inputs.keys():
@@ -323,7 +331,7 @@ def validate(val_loader, mymodel, test_writers):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i % 2 == 0:
+            if args.drawflag:
                 out_L_show = out_L.detach().cpu().numpy()
                 out_L_show_ = out_L_show[0].reshape(-1, 3)
                 tar_L_show = target['light'].cpu().numpy()
@@ -333,6 +341,8 @@ def validate(val_loader, mymodel, test_writers):
                 test_writers.add_image('test/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
                 test_writers.add_image('test/Predicted light', CreatObservemapFromL(out_L_show_), i)
                 #print('Test: [{0}/{1}]\t Time {2}\t loss {3}'.format(i, len(val_loader), batch_time, loss_eval))
+
+            args.drawflag=False
 
 
     print(' * loss in evaluation {:.3f}'.format(loss_eval.avg))

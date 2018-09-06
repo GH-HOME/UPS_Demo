@@ -49,16 +49,18 @@ class Upsnets(nn.Module):
         #self.conv1 = conv(self.batchNorm, 1, 64,kernel_size=7,stride=2)
 
         #non share weight
-        self.conv1 = conv(self.batchNorm, input_N, 64, kernel_size=7, stride=1)
-        self.conv2 = conv(self.batchNorm, 64, 128, kernel_size=5, stride=1)
-        self.conv3 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=1)
-        self.conv3_1 = conv(self.batchNorm, 256, 256, kernel_size=3, stride=1)
-        self.conv4 = conv(self.batchNorm, 256, 512, kernel_size=3, stride=1)
-        self.conv4_1 = conv(self.batchNorm, 512, 512, kernel_size=3, stride=1)
+        self.conv1 = conv(self.batchNorm, input_N, 32, kernel_size=7, stride=1)
+        self.conv2 = conv(self.batchNorm, 32, 64, kernel_size=5, stride=1)
+        self.conv3 = conv(self.batchNorm, 64, 128, kernel_size=3, stride=1)
+        self.conv3_1 = conv(self.batchNorm, 128, 128, kernel_size=3, stride=1)
+        self.conv4 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=1)
+
         self.pool = nn.MaxPool2d(2, 2)
-        self.convN_1 = conv(self.batchNorm, 512, 3, kernel_size=1, stride=1)
-        self.fc_l1=nn.Linear(3*8*8,64)
-        self.fc_l2 = nn.Linear(64, input_N*3)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.convN_1 = conv(self.batchNorm, 256, 3, kernel_size=1, stride=1)
+        self.fc_l1=nn.Linear(3*8*8,32)
+        self.fc_l2 = nn.Linear(32, input_N*3)
 
         for m in self.modules():
             if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d) or isinstance(m,nn.Linear):
@@ -69,7 +71,7 @@ class Upsnets(nn.Module):
                     m.weight.data.fill_(1)
                     m.bias.data.zero_()
 
-    def forward(self, inputs,train_writer=None):
+    def forward(self, inputs,train_writer=None, printflag=False):
         images = inputs['Imgs']
         Batch_size, Light_num, w,h =images.shape
         out_conv1=self.conv1(images.float())
@@ -81,8 +83,8 @@ class Upsnets(nn.Module):
         out_conv3_1=self.conv3_1(out_conv3_pool)
         out_conv4=self.conv4(out_conv3_1)
         out_conv4_pool=self.pool(out_conv4)
-        out_conv4_1=self.conv4_1(out_conv4_pool)
-        out_conv_img = self.convN_1(out_conv4_1)
+
+        out_conv_img = self.convN_1(out_conv4_pool)
         out_conv_img_flat = out_conv_img.view(-1, num_flat_features(out_conv_img))
         out_L = self.fc_l2(self.fc_l1(out_conv_img_flat))
         out_L = out_L.view(Batch_size,-1,3)
@@ -97,9 +99,9 @@ class Upsnets(nn.Module):
         out_L = out_L / out_L_norm
         out_L = out_L.view(Batch_size, -1, 3)
 
-
-        if train_writer is not None:
-            train_writer.add_image('Internel/out_conv2', out_conv2.detach().cpu().numpy()[0,0,:,:])
+        if train_writer is not None and printflag:
+            train_writer.add_image('Internel/images', images.cpu().numpy()[0, 0, :, :])
+            train_writer.add_image('Internel/out_conv1', out_conv1.detach().cpu().numpy()[0,0,:,:])
             train_writer.add_image('Internel/out_conv3', out_conv3.detach().cpu().numpy()[0,0,:,:])
             train_writer.add_image('Internel/out_conv_img', out_conv_img.detach().cpu().numpy()[0,0,:,:])
 

@@ -50,7 +50,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=8, type=int,
+parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
@@ -60,12 +60,12 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
 parser.add_argument('--beta', default=0.999, type=float, metavar='M',
                     help='beta parameter for adam')
-parser.add_argument('--weight-decay', '--wd', default=4e-4, type=float,
+parser.add_argument('--weight-decay', '--wd', default=1e-3, type=float,
                     metavar='W', help='weight decay')
 parser.add_argument('--bias-decay', default=0, type=float,
                     metavar='B', help='bias decay')
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
-parser.add_argument('--pretrained', dest='./Lambertian_direction/09_04_19_40_save/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/checkpoint.pth.tar', default=None,
+parser.add_argument('--pretrained', default=None,
                     help='path to pre-trained model')
 parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
@@ -74,11 +74,13 @@ parser.add_argument('-e', '--evaluate', dest='evaluate',default=True, action='st
                     help='evaluate model on validation set')
 
 
-best_EPE = -1
+best_EPE = 999
 n_iter = 0
 Light_num=30
 ChoiseTime=5000
-losstype='angular'
+losstype='valid'
+pretrainmodel='./Lambertian_direction/09_06_17_49/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/model_best.pth.tar'
+
 
 
 def main():
@@ -132,6 +134,7 @@ def main():
         test_set, batch_size=args.batch_size,
         num_workers=args.workers, pin_memory=True, shuffle=False)
 
+    args.pretrained = pretrainmodel
     if args.pretrained:
         network_data = torch.load(args.pretrained)
         args.arch = network_data['arch']
@@ -181,12 +184,13 @@ def main():
 
         is_best = eval_loss < best_EPE
         best_EPE = min(eval_loss, best_EPE)
+        filename="{}_{}".format(epoch + 1,'checkpoint.pth.tar')
         save_checkpoint({
             'epoch': epoch + 1,
             'arch': args.arch,
             'state_dict': mymodel.module.state_dict(),
             'best_EPE': best_EPE
-        }, is_best)
+        }, is_best,filename)
 
         print('=> save model for epoch {}'.format(epoch))
 
@@ -281,8 +285,10 @@ def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
         mean_vec=torch.mean(input_Lmap,0).repeat(n,1)
         diff_vec=input_Lmap-mean_vec
         distance=torch.sqrt(torch.sum(diff_vec * diff_vec,1))
-
         return (diffangle_cos.mean()+diffangle_cos.var())+sparse_weight/(distance.mean())
+    elif type == 'valid':
+        diffangle_cos = torch.abs(1 - torch.sum(input_Lmap * target_Lmap.float(), 1))
+        return diffangle_cos.mean()
     else:
         raise RuntimeError("no loss type")
 

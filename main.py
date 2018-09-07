@@ -70,17 +70,17 @@ parser.add_argument('--pretrained', default=None,
 parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
-parser.add_argument('-e', '--evaluate', dest='evaluate',default=True, action='store_true',
+parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
 
 
 best_EPE = 999
 n_iter = 0
-Light_num=30
+Light_num=50
 ChoiseTime=5000
-losstype='valid'
-pretrainmodel='./Lambertian_direction/09_06_17_49/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/model_best.pth.tar'
-
+losstype='angular'
+# pretrainmodel='./Lambertian_direction/09_06_17_49/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/model_best.pth.tar'
+pretrainmodel=None
 
 
 def main():
@@ -320,7 +320,7 @@ def validate(val_loader, mymodel, test_writers):
                 target_var[item] = torch.autograd.Variable(target[item].cuda())
             out_L = mymodel(input_var)
 
-            lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,losstype)
+            lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,'valid')
 
             loss_eval.update(lossL)
             test_writers.add_scalar('test_loss', lossL.data[0], i)

@@ -1,5 +1,5 @@
 import argparse
-import  os
+import os
 import shutil
 import time
 
@@ -69,6 +69,8 @@ parser.add_argument('--pretrained', default=None,
                     help='path to pre-trained model')
 parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
+parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
+                    help='draw model output in tensorboardX')
 parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
@@ -223,6 +225,9 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         # plt.imshow(target['light'][0])
         # plt.show()
 
+        if i % args.print_intervel == 0:
+            args.drawflag=True
+
         data_time.update(time.time()-end)
         input_var=inputs
         target_var=target
@@ -230,7 +235,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
             input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
         for item in target.keys():
             target_var[item]  = torch.autograd.Variable(target[item]).cuda()
-        out_L=mymodel(input_var,train_writer)
+        out_L=mymodel(input_var,train_writer, args.drawflag)
 
 
 
@@ -250,7 +255,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_intervel == 0:
+        if args.drawflag:
             out_L_show=out_L.detach().cpu().numpy()
             out_L_show_=out_L_show[0].reshape(-1,3)
             tar_L_show=target['light'].cpu().numpy()
@@ -261,6 +266,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
             train_writer.add_image('train/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
             train_writer.add_image('train/Predicted light', CreatObservemapFromL(out_L_show_), i)
 
+        args.drawflag = False
         if i >= epoch_size:
             break
     return losses.avg
@@ -312,13 +318,17 @@ def validate(val_loader, mymodel, test_writers):
     end = time.time()
     with torch.no_grad():
         for i, (inputs, target) in enumerate(val_loader):
+
+            if i % args.print_intervel == 0:
+                args.drawflag = True
+
             input_var = inputs
             target_var = target
             for item in inputs.keys():
                 input_var[item] = torch.autograd.Variable(inputs[item].cuda())
             for item in target.keys():
                 target_var[item] = torch.autograd.Variable(target[item].cuda())
-            out_L = mymodel(input_var)
+            out_L = mymodel(input_var,test_writers,args.drawflag)
 
             lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,'valid')
 
@@ -329,7 +339,7 @@ def validate(val_loader, mymodel, test_writers):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i % 2 == 0:
+            if args.drawflag:
                 out_L_show = out_L.detach().cpu().numpy()
                 out_L_show_ = out_L_show[0].reshape(-1, 3)
                 tar_L_show = target['light'].cpu().numpy()

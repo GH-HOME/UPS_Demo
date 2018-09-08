@@ -114,15 +114,15 @@ class RandomCrop(object):
             self.size = size
 
     def __call__(self, inputs,target):
-        h, w, _ = inputs.shape
+        _, h, w = inputs['Imgs'].shape
         th, tw = self.size
         if w == tw and h == th:
             return inputs,target
 
         x1 = random.randint(0, w - tw)
         y1 = random.randint(0, h - th)
-        inputs = inputs[y1: y1 + th,x1: x1 + tw]
-        return inputs, target[y1: y1 + th,x1: x1 + tw]
+        inputs['Imgs'] = inputs['Imgs'][:,y1: y1 + th,x1: x1 + tw]
+        return inputs, target
 
 
 class RandomHorizontalFlip(object):
@@ -131,9 +131,10 @@ class RandomHorizontalFlip(object):
 
     def __call__(self, inputs, target):
         if random.random() < 0.5:
-            inputs = np.copy(np.fliplr(inputs))
-            target = np.copy(np.fliplr(target))
-            target[:,:,0] *= -1
+            n, w, h = inputs['Imgs'].shape
+            for i in range(n):
+                inputs['Imgs'][i]=torch.from_numpy(np.copy(np.fliplr(inputs['Imgs'][i])))
+
         return inputs,target
 
 
@@ -143,9 +144,10 @@ class RandomVerticalFlip(object):
 
     def __call__(self, inputs, target):
         if random.random() < 0.5:
-            inputs = np.copy(np.flipud(inputs))
-            target = np.copy(np.flipud(target))
-            target[:,:,1] *= -1
+            n,w,h = inputs['Imgs'].shape
+            for i in range(n):
+                inputs['Imgs'][i]=torch.from_numpy(np.copy(np.flipud(inputs['Imgs'][i])))
+
         return inputs,target
 
 

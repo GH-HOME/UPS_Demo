@@ -113,7 +113,9 @@ def main():
 
     input_transform = image_transforms.Compose([
         image_transforms.ArrayToTensor(),
-        image_transforms.CenterCrop(128)
+        image_transforms.RandomCrop(96),
+        image_transforms.RandomVerticalFlip(),
+        image_transforms.RandomHorizontalFlip()
 
     ])
 

@@ -60,7 +60,7 @@ class Upsnets(nn.Module):
         self.conv5_1 = conv(self.batchNorm, 1024, 1024, kernel_size=3, stride=1)
         self.pool = nn.MaxPool2d(2, 2)
         self.convN_1 = conv(self.batchNorm, 1024, 3, kernel_size=1, stride=1)
-        self.fc_l1=nn.Linear(3*8*8,128)
+        self.fc_l1=nn.Linear(3*6*6,128)
         self.fc_l2 = nn.Linear(128, input_N*3)
         self.relu = nn.ReLU(inplace=True)
         self.dropout = nn.Dropout(0.5)

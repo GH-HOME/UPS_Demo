@@ -48,7 +48,7 @@ parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
+parser.add_argument('--epoch-size', default=0, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
 parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
@@ -78,15 +78,15 @@ parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='s
 
 best_EPE = 999
 n_iter = 0
-Light_num=50
+Light_num=10
 ChoiseTime=5000
 losstype='angular'
-# pretrainmodel='./Lambertian_direction/09_06_17_49/upsnets_bn,adam,300epochs,epochSize1000,b16,lr0.0002/model_best.pth.tar'
+#pretrainmodel='./Lambertian_direction/09_07_23_23/upsnets_bn,adam,300epochs,b8,lr0.0002/model_best.pth.tar'
 pretrainmodel=None
 
 
 def main():
-    #os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     global args, best_EPE, save_path
     args=parser.parse_args()
@@ -291,7 +291,7 @@ def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
         mean_vec=torch.mean(input_Lmap,0).repeat(n,1)
         diff_vec=input_Lmap-mean_vec
         distance=torch.sqrt(torch.sum(diff_vec * diff_vec,1))
-        return (diffangle_cos.mean()+diffangle_cos.var())+sparse_weight/(distance.mean())
+        return (diffangle_cos.mean())+sparse_weight/(distance.mean())
     elif type == 'valid':
         diffangle_cos = torch.abs(1 - torch.sum(input_Lmap * target_Lmap.float(), 1))
         return diffangle_cos.mean()

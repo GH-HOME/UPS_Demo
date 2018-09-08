@@ -51,7 +51,7 @@ def drawlightseq(Light):
 
     n, _ = Light.shape
     #change view direction
-    ax.view_init(elev=90,azim=0)
+    #ax.view_init(elev=90,azim=0)
     for i in range(n):
         lightvector=np.zeros([2,3],np.float)
         lightvector[1]=Light[i]
@@ -65,11 +65,11 @@ def drawlightseq(Light):
 
 if __name__ == '__main__':
     X = np.zeros([2,3],np.float)
-    X[1,0]=0.15519809
-    X[1,1]=0.09810481
-    X[1,2]=0.983
-    X[0, 0] = -0.07333659
-    X[0, 1] = -0.26413813
-    X[0, 2] = 0.96169275
+
+    X[0]=[-0.13607232, -0.37496043, 0.917]
+    X[1]=[-0.13509725, -0.08689965,  0.9870143 ]
+    # X[0, 0] = -0.07333659
+    # X[0, 1] = -0.26413813
+    # X[0, 2] = 0.96169275
 
     drawlightseq(X)

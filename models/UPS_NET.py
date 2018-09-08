@@ -59,6 +59,8 @@ class Upsnets(nn.Module):
         self.convN_1 = conv(self.batchNorm, 512, 3, kernel_size=1, stride=1)
         self.fc_l1=nn.Linear(3*8*8,64)
         self.fc_l2 = nn.Linear(64, input_N*3)
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(0.5)
 
         for m in self.modules():
             if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d) or isinstance(m,nn.Linear):
@@ -69,7 +71,7 @@ class Upsnets(nn.Module):
                     m.weight.data.fill_(1)
                     m.bias.data.zero_()
 
-    def forward(self, inputs,train_writer=None):
+    def forward(self, inputs,train_writer=None, printflag=False):
         images = inputs['Imgs']
         Batch_size, Light_num, w,h =images.shape
         out_conv1=self.conv1(images.float())
@@ -84,8 +86,8 @@ class Upsnets(nn.Module):
         out_conv4_1=self.conv4_1(out_conv4_pool)
         out_conv_img = self.convN_1(out_conv4_1)
         out_conv_img_flat = out_conv_img.view(-1, num_flat_features(out_conv_img))
-        out_L = self.fc_l2(self.fc_l1(out_conv_img_flat))
-        out_L = out_L.view(Batch_size,-1,3)
+        out_L = self.fc_l2(self.relu(self.fc_l1(out_conv_img_flat)))
+        out_L = out_L.view(Batch_size, -1, 3)
 
         # out_L = out_L.squeeze()
         out_L_norm = torch.norm(out_L, 2, 2)
@@ -98,7 +100,7 @@ class Upsnets(nn.Module):
         out_L = out_L.view(Batch_size, -1, 3)
 
 
-        if train_writer is not None:
+        if train_writer is not None and printflag:
             train_writer.add_image('Internel/out_conv2', out_conv2.detach().cpu().numpy()[0,0,:,:])
             train_writer.add_image('Internel/out_conv3', out_conv3.detach().cpu().numpy()[0,0,:,:])
             train_writer.add_image('Internel/out_conv_img', out_conv_img.detach().cpu().numpy()[0,0,:,:])

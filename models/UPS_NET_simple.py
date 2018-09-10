@@ -90,8 +90,8 @@ class Upsnets(nn.Module):
         out_Linear1 = self.fc_l1(out_conv_img_flat)
 
         out_Linear1_relu=self.relu(out_Linear1)
-        out_Linear1_drop_relu = self.dropout(out_Linear1_relu)
-        out_L=self.fc_l2(out_Linear1_drop_relu)
+        #out_Linear1_drop_relu = self.dropout(out_Linear1_relu)
+        out_L=self.fc_l2(out_Linear1_relu)
         out_L = out_L.view(Batch_size,-1,3)
 
 

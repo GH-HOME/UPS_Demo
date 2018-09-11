@@ -36,7 +36,7 @@ group.add_argument('-s', '--split-file', default=None, type=str,
 group.add_argument('--split-value', default=0.8, type=float,
                    help='test-val split proportion (between 0 (only test) and 1 (only train))')
 
-parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets',
+parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets_bn',
                     choices=model_names,
                     help='model architecture, overwritten if pretrained is specified: ' +
                     ' | '.join(model_names))
@@ -50,11 +50,11 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=0, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=16, type=int,
+parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float,
+parser.add_argument('--lr', '--learning-rate', default=4e-4, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -71,7 +71,7 @@ parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
-parser.add_argument('--milestones', default=[100,150,200], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
+parser.add_argument('--milestones', default=[50,100,150,200,250], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
 
@@ -81,7 +81,7 @@ n_iter = 0
 Light_num=10
 ChoiseTime=5000
 losstype='angular'
-#pretrainmodel='./Lambertian_direction/09_10_17_12/upsnets_bn,adam,300epochs,b8,lr0.0002/model_best.pth.tar'
+#pretrainmodel='./Lambertian_direction/09_11_14_28/upsnets,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
 pretrainmodel=None
 
 
@@ -287,11 +287,10 @@ def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
         lossfn=torch.nn.MSELoss()
         return lossfn(input_Lmap, target_Lmap)+sparse_weight/distance.mean()
     elif type == 'angular':
-        diffangle_cos=torch.abs(1-torch.sum(input_Lmap*target_Lmap.float(),1))
-        mean_vec=torch.mean(input_Lmap,0).repeat(n,1)
-        diff_vec=input_Lmap-mean_vec
-        distance=torch.sqrt(torch.sum(diff_vec * diff_vec,1))
-        return (diffangle_cos.mean())+sparse_weight/(distance.mean())
+        diffangle_cos=torch.sum(input_Lmap*target_Lmap.float(),1)
+        GT_angle_cos=torch.ones_like(diffangle_cos)
+        lossfn = torch.nn.MSELoss()
+        return lossfn(diffangle_cos,GT_angle_cos)
     elif type == 'valid':
         diffangle_cos = torch.abs(1 - torch.sum(input_Lmap * target_Lmap.float(), 1))
         return diffangle_cos.mean()

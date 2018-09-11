@@ -24,17 +24,10 @@ def conv(batchNorm, in_planes, out_planes, kernel_size=3, stride=1):
         )
 
 
-def fc(batchNorm, in_planes, out_planes):
-    if batchNorm:
-        return nn.Sequential(
-            nn.Linear(in_planes,out_planes),
-            nn.BatchNorm2d(out_planes),     #这样加是错的，batchnorm必须要4D数据
-            nn.ReLU(inplace=True)
-        )
-    else:
-        return nn.Sequential(
-            nn.Linear(in_planes, out_planes),
-            nn.ReLU(inplace=True)
+def fc(in_planes, out_planes):
+    return nn.Sequential(
+        nn.Linear(in_planes,out_planes),
+        nn.ReLU(inplace=True)
         )
 
 
@@ -54,23 +47,51 @@ def crop_like(input, target):
 
 class Upsnets(nn.Module):
 
-    def __init__(self,batchNorm=True, input_Node=10*8*8,output_node=10):
+    def __init__(self,batchNorm=True, input_size=8,LightNum=10):
         super(Upsnets,self).__init__()
 
         self.batchNorm=batchNorm
-        self.input_Node=input_Node
+        self.input_size=input_size
+        self.LightNum=LightNum
 
         #non share weight
-        self.fc1 = fc(self.batchNorm, input_Node, 32*7*7)
-        self.fc2 = fc(self.batchNorm, 32*7*7, 64*5*5)
-        self.fc3 = fc(self.batchNorm, 64*5*5, 128*3*3)
-        self.fc4 = fc(self.batchNorm, 128*3*3, 128*3*3)
-        self.fc5 = fc(self.batchNorm, 128*3*3, 256*3*3)
-        self.fc6 = fc(self.batchNorm, 256 * 3 * 3, 128 * 3 * 3)
 
-        self.fc_l1=nn.Linear(128*3*3,64*3)
-        self.fc_l2 = nn.Linear(64*3, output_node*3)
+        self.conv1 = conv(self.batchNorm, 1, 32, kernel_size=5, stride=1)
+        self.conv2 = conv(self.batchNorm, 32, 64, kernel_size=3, stride=1)
+        self.conv3 = conv(self.batchNorm, 64, 128, kernel_size=3, stride=1)
+        self.conv3_1 = conv(self.batchNorm, 128, 128, kernel_size=3, stride=1)
+        self.conv4 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=1)
+        self.conv5 = conv(self.batchNorm, 256, 3, kernel_size=1, stride=1)
 
+        self.encoder=nn.Sequential(
+            self.conv1,
+            self.conv2,
+            self.conv3,
+            self.conv3_1,
+            self.conv4,
+            self.conv5
+        )
+
+        self.conv_image_light1=conv(self.batchNorm,3+1,32,kernel_size=5,stride=1)
+        self.conv_image_light2 = conv(self.batchNorm, 32, 1, kernel_size=3, stride=1)
+        self.fc1 = fc(input_size*input_size, 32*5*5)
+        self.fc2 = fc(32*5*5, 64*3*3)
+        self.fc3 = fc(64*3*3, 128*3*3)
+        self.fc_l1=fc(128*3*3,64*3)
+        self.fc_l2 = nn.Linear(64*3, 3)
+
+        self.feature_compress = nn.Sequential(
+            self.conv_image_light1,
+            self.conv_image_light2
+        )
+
+        self.light_infer=nn.Sequential(
+            self.fc1,
+            self.fc2,
+            self.fc3,
+            self.fc_l1,
+            self.fc_l2
+        )
         self.dropout = nn.Dropout(0.5)
         self.relu=nn.ReLU(inplace=True)
         for m in self.modules():
@@ -85,21 +106,24 @@ class Upsnets(nn.Module):
     def forward(self, inputs,train_writer=None, printflag=False):
         images = inputs['Imgs']
         Batch_size, Light_num, w,h =images.shape
-        images_flat=images.view(Batch_size,-1)
 
-        assert images_flat.shape[1]==self.input_Node
+        out_encoder = torch.randn((Light_num, Batch_size, 3, w, h), dtype=torch.float).cuda()
+        for i in range(Light_num):
+            input_image_single=images[:,i,:,:].unsqueeze(1).float()
+            out_encoder[i]=self.encoder(input_image_single)
 
-        out_fc1=self.fc1(images_flat.float())
-        out_fc2 = self.fc2(out_fc1)
-        out_fc3=self.fc3(out_fc2)
-        out_fc4=self.fc4(out_fc3)
-        out_fc5=self.fc5(out_fc4)
-        out_fc6=self.fc6(out_fc5)
+        out_encoder_max=torch.max(out_encoder,0)[0]  # this can be used to weak supervise normal and albedo
+        #out_encoder_max=out_encoder_max.squeeze()
 
-        out_L1 = self.fc_l1(out_fc6)
-        out_L1=self.relu(out_L1)
-        out_L = self.fc_l2(out_L1)
-        out_L = out_L.view(Batch_size, -1, 3)
+        out_L=torch.randn((Batch_size, Light_num, 3), dtype=torch.float).cuda()
+
+        for b in range(Batch_size):
+            for i in range(Light_num):
+                input_single_image = images[b, i, :, :].unsqueeze(0).float()
+                out_concat=torch.cat((out_encoder_max[b],input_single_image),0).unsqueeze(0)
+                feature_compress=self.feature_compress(out_concat)
+                feature_compress=feature_compress.view(-1)
+                out_L[b, i]=self.light_infer(feature_compress)
 
 
         # out_L = out_L.squeeze()
@@ -114,9 +138,8 @@ class Upsnets(nn.Module):
 
         if train_writer is not None and printflag:
             train_writer.add_image('Internel/images', images.cpu().numpy()[0, 0, :, :])
-            train_writer.add_image('Internel/out_fc1', out_fc1.detach().cpu().numpy()[0].reshape(32,-1))
-            train_writer.add_image('Internel/out_fc4', out_fc4.detach().cpu().numpy()[0].reshape(128,-1))
-            train_writer.add_image('Internel/out_fc6', out_fc6.detach().cpu().numpy()[0].reshape(128,-1))
+            train_writer.add_image('Internel/out_encoder_max', out_encoder_max.detach().cpu().numpy()[0])
+
 
         return out_L
 
@@ -128,7 +151,7 @@ class Upsnets(nn.Module):
 
 
 def upsnets(data=None,input_N=50,imagesize=8):
-    model=Upsnets(batchNorm=False,input_Node=input_N*imagesize*imagesize,output_node=input_N)
+    model=Upsnets(batchNorm=False,input_size=imagesize,LightNum=input_N)
     if data is not None:
         model.load_state_dict(data['state_dict'])
     return model
@@ -136,7 +159,7 @@ def upsnets(data=None,input_N=50,imagesize=8):
 
 def upsnets_bn(data=None,input_N=50, imagesize=8):
 
-    model = Upsnets(batchNorm=True,input_Node=input_N*imagesize*imagesize,output_node=input_N)
+    model = Upsnets(batchNorm=True,input_size=imagesize,LightNum=input_N)
     if data is not None:
         model.load_state_dict(data['state_dict'])
     return model

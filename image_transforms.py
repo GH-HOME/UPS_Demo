@@ -33,6 +33,7 @@ class ArrayToTensor(object):
 
     def __call__(self, inputs, targets):
         inputs['Imgs'] = torch.from_numpy(np.array(inputs['Imgs']))
+        inputs['mask'] = torch.from_numpy(np.array(inputs['mask']))
 
         targets['light']=torch.from_numpy(np.array(targets['light']))
 
@@ -119,9 +120,19 @@ class RandomCrop(object):
         if w == tw and h == th:
             return inputs,target
 
-        x1 = random.randint(0, w - tw)
-        y1 = random.randint(0, h - th)
-        inputs['Imgs'] = inputs['Imgs'][:,y1: y1 + th,x1: x1 + tw]
+        x_crop=0
+        y_crop=0
+        while True:
+            x1 = random.randint(0, w - tw)
+            y1 = random.randint(0, h - th)
+            patch=inputs['mask'][y1: y1 + th,x1: x1 + tw]
+            count=torch.nonzero(patch).size(0)
+            if count/(self.size[0]*self.size[1])>0.95:
+                x_crop=x1
+                y_crop=y1
+                break
+
+        inputs['Imgs'] = inputs['Imgs'][:, y_crop: y_crop + th, x_crop: x_crop + tw]
         return inputs, target
 
 

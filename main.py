@@ -36,7 +36,7 @@ group.add_argument('-s', '--split-file', default=None, type=str,
 group.add_argument('--split-value', default=0.8, type=float,
                    help='test-val split proportion (between 0 (only test) and 1 (only train))')
 
-parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets_bn',
+parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets',
                     choices=model_names,
                     help='model architecture, overwritten if pretrained is specified: ' +
                     ' | '.join(model_names))
@@ -50,7 +50,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=0, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=8, type=int,
+parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
@@ -81,7 +81,7 @@ n_iter = 0
 Light_num=10
 ChoiseTime=5000
 losstype='angular'
-#pretrainmodel='./Lambertian_direction/09_07_23_23/upsnets_bn,adam,300epochs,b8,lr0.0002/model_best.pth.tar'
+#pretrainmodel='./Lambertian_direction/09_10_17_12/upsnets_bn,adam,300epochs,b8,lr0.0002/model_best.pth.tar'
 pretrainmodel=None
 
 
@@ -113,7 +113,7 @@ def main():
 
     input_transform = image_transforms.Compose([
         image_transforms.ArrayToTensor(),
-        image_transforms.CenterCrop(128)
+        image_transforms.RandomCrop(8)
 
     ])
 

@@ -26,9 +26,10 @@ class ListDataset(data.Dataset):
         self.loader = loader
 
     def __getitem__(self, index):
-        subImagepath, Light_sample = self.path_list[index]
+        subImagepath, Light_sample, mask_path = self.path_list[index]
         images=self.loader(subImagepath)
-        inputs={'Imgs':images}
+        mask=cv2.imread(mask_path[0],0)/255
+        inputs={'Imgs':images, 'mask':mask}
         targets={'light':Light_sample}
 
 

@@ -47,7 +47,7 @@ def crop_like(input, target):
 
 class Upsnets(nn.Module):
 
-    def __init__(self,batchNorm=True, input_size=8,LightNum=10):
+    def __init__(self,batchNorm=True, input_size=128,LightNum=10):
         super(Upsnets,self).__init__()
 
         self.batchNorm=batchNorm
@@ -99,9 +99,9 @@ class Upsnets(nn.Module):
                 kaiming_normal(m.weight.data)
                 if m.bias is not None:
                     m.bias.data.zero_()
-                elif isinstance(m,nn.BatchNorm2d):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
+            elif isinstance(m,nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
     def forward(self, inputs,train_writer=None, printflag=False):
         images = inputs['Imgs']
@@ -150,14 +150,14 @@ class Upsnets(nn.Module):
         return [param for name, param in self.named_parameters() if 'bias' in name]
 
 
-def upsnets(data=None,input_N=50,imagesize=8):
+def upsnets(data=None,input_N=50,imagesize=128):
     model=Upsnets(batchNorm=False,input_size=imagesize,LightNum=input_N)
     if data is not None:
         model.load_state_dict(data['state_dict'])
     return model
 
 
-def upsnets_bn(data=None,input_N=50, imagesize=8):
+def upsnets_bn(data=None,input_N=50, imagesize=128):
 
     model = Upsnets(batchNorm=True,input_size=imagesize,LightNum=input_N)
     if data is not None:

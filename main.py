@@ -54,7 +54,7 @@ parser.add_argument('-b', '--batch-size', default=1, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
+parser.add_argument('--lr', '--learning-rate', default=5e-5, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -67,7 +67,7 @@ parser.add_argument('--bias-decay', default=0, type=float,
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', default=None,
                     help='path to pre-trained model')
-parser.add_argument('--print_intervel',  default=500,
+parser.add_argument('--print_intervel',  default=1000,
                     help='the iter interval for save the model')
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
@@ -296,7 +296,7 @@ def calculateLoss_L(input_Lmap,target_Lmap, confidence, sparse_weight, type):
         #return lossfn(diffangle_cos*confidence,GT_angle_cos*confidence)
         return torch.abs(diffangle_cos * confidence - GT_angle_cos * confidence).mean()
     elif type == 'valid':
-        index=np.where(confidence.numpy()==1.0)
+        index=np.where(confidence.cpu().numpy()>0.9)[1]
         diffangle_cos = torch.sum(input_Lmap * target_Lmap.float(), 1)
         GT_angle_cos = torch.ones_like(diffangle_cos)
 

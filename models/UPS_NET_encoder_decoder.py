@@ -47,7 +47,7 @@ def crop_like(input, target):
 
 class Upsnets(nn.Module):
 
-    def __init__(self,batchNorm=True, input_size=128,LightNum=10):
+    def __init__(self,batchNorm=True, input_size=8,LightNum=10):
         super(Upsnets,self).__init__()
 
         self.batchNorm=batchNorm
@@ -79,7 +79,6 @@ class Upsnets(nn.Module):
         self.fc3 = fc(64*3*3, 128*3*3)
         self.fc_l1=fc(128*3*3,64*3)
         self.fc_l2 = nn.Linear(64*3, 3)
-        self.dropout = nn.Dropout(0.8)
 
         self.feature_compress = nn.Sequential(
             self.conv_image_light1,
@@ -93,6 +92,7 @@ class Upsnets(nn.Module):
             self.fc_l1,
             self.fc_l2
         )
+        self.dropout = nn.Dropout(0.5)
         self.relu=nn.ReLU(inplace=True)
         for m in self.modules():
             if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d) or isinstance(m,nn.Linear):
@@ -104,7 +104,7 @@ class Upsnets(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, inputs,train_writer=None, printflag=False):
-        images = inputs['Imgs']
+        images = inputs['Imgs'][0]
         Batch_size, Light_num, w,h =images.shape
 
         out_encoder = torch.randn((Light_num, Batch_size, 3, w, h), dtype=torch.float).cuda()
@@ -150,14 +150,14 @@ class Upsnets(nn.Module):
         return [param for name, param in self.named_parameters() if 'bias' in name]
 
 
-def upsnets(data=None,input_N=50,imagesize=128):
+def upsnets(data=None,input_N=50,imagesize=8):
     model=Upsnets(batchNorm=False,input_size=imagesize,LightNum=input_N)
     if data is not None:
         model.load_state_dict(data['state_dict'])
     return model
 
 
-def upsnets_bn(data=None,input_N=50, imagesize=128):
+def upsnets_bn(data=None,input_N=50, imagesize=8):
 
     model = Upsnets(batchNorm=True,input_size=imagesize,LightNum=input_N)
     if data is not None:

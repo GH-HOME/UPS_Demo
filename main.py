@@ -50,24 +50,24 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=0, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=16, type=int,
+parser.add_argument('-b', '--batch-size', default=1, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=5e-5, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
 parser.add_argument('--beta', default=0.999, type=float, metavar='M',
                     help='beta parameter for adam')
-parser.add_argument('--weight-decay', '--wd', default=0, type=float,
+parser.add_argument('--weight-decay', '--wd', default=1e-5, type=float,
                     metavar='W', help='weight decay')
 parser.add_argument('--bias-decay', default=0, type=float,
                     metavar='B', help='bias decay')
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', default=None,
                     help='path to pre-trained model')
-parser.add_argument('--print_intervel',  default=400,
+parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
@@ -78,7 +78,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='s
 
 best_EPE = 999
 n_iter = 0
-Light_num=10
+Light_num=22
 ChoiseTime=5000
 losstype='angular'
 #pretrainmodel='./Lambertian_direction/09_11_14_28/upsnets,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
@@ -113,7 +113,7 @@ def main():
 
     input_transform = image_transforms.Compose([
         image_transforms.ArrayToTensor(),
-        image_transforms.CenterCrop(128)
+        image_transforms.RandomCrop(8,10,0.75)
 
     ])
 
@@ -175,6 +175,7 @@ def main():
         #     args.sparse_weight = 0.0
         # else:
         #     args.sparse_weight-epoch*0.08
+        print('=> begin to train')
         train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
         train_writer.add_scalar('mean loss in train epoch', train_loss, epoch)
 
@@ -211,6 +212,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
 
     end=time.time()
 
+    print('=> begin to Extract Data')
     for i, (inputs, target) in enumerate(train_loader):
 
         #plot the input data
@@ -245,7 +247,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         # plt.imshow(out_L_show[0][0])
         # plt.show()
 
-        lossL =calculateLoss_L(out_L,target_var['light'],args.sparse_weight,losstype)
+        lossL =calculateLoss_L(out_L,target_var['light'],input_var['confidence'], args.sparse_weight, losstype)
         losses.update(lossL.data[0])
         train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
         n_iter+=1
@@ -262,7 +264,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
             tar_L_show_=tar_L_show[0].reshape(-1,3)
 
             print('Epoch: [{0}][{1}/{2}]\t Time {3}\t Data {4}\t Loss {5}\t '.format(epoch, i, epoch_size, batch_time, data_time, losses))
-            train_writer.add_image('train/Origin image', inputs['Imgs'][0][0],i)
+            train_writer.add_image('train/Origin image', inputs['Imgs'][0][0][0],i)
             train_writer.add_image('train/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
             train_writer.add_image('train/Predicted light', CreatObservemapFromL(out_L_show_), i)
 
@@ -272,11 +274,12 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
     return losses.avg
 
 
-def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
+def calculateLoss_L(input_Lmap,target_Lmap, confidence, sparse_weight, type):
 
     input_Lmap = input_Lmap.view(-1,3).float()
 
     target_Lmap = target_Lmap.squeeze().float()
+    confidence=confidence.float()
     target_Lmap = target_Lmap.view(-1, 3)
     n,_=target_Lmap.shape
 
@@ -290,11 +293,14 @@ def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
         diffangle_cos=torch.sum(input_Lmap*target_Lmap.float(),1)
         GT_angle_cos=torch.ones_like(diffangle_cos)
         lossfn = torch.nn.MSELoss()
-        #return lossfn(diffangle_cos,GT_angle_cos)
-        return torch.abs(diffangle_cos-GT_angle_cos).mean()  #L1
+        #return lossfn(diffangle_cos*confidence,GT_angle_cos*confidence)
+        return torch.abs(diffangle_cos * confidence - GT_angle_cos * confidence).mean()
     elif type == 'valid':
-        diffangle_cos = torch.abs(1 - torch.sum(input_Lmap * target_Lmap.float(), 1))
-        return diffangle_cos.mean()
+        index=np.where(confidence.numpy()==1.0)
+        diffangle_cos = torch.sum(input_Lmap * target_Lmap.float(), 1)
+        GT_angle_cos = torch.ones_like(diffangle_cos)
+
+        return torch.abs(diffangle_cos[index] - GT_angle_cos[index]).mean()
     else:
         raise RuntimeError("no loss type")
 
@@ -330,7 +336,7 @@ def validate(val_loader, mymodel, test_writers):
                 target_var[item] = torch.autograd.Variable(target[item].cuda())
             out_L = mymodel(input_var,test_writers,args.drawflag)
 
-            lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,'valid')
+            lossL = calculateLoss_L(out_L, target_var['light'],input_var['confidence'], args.sparse_weight,'valid')
 
             loss_eval.update(lossL)
             test_writers.add_scalar('test_loss', lossL.data[0], i)
@@ -345,7 +351,7 @@ def validate(val_loader, mymodel, test_writers):
                 tar_L_show = target['light'].cpu().numpy()
                 tar_L_show_ = tar_L_show[0].reshape(-1, 3)
 
-                test_writers.add_image('test/Origin image', inputs['Imgs'][0][0], i)
+                test_writers.add_image('test/Origin image', inputs['Imgs'][0][0][0], i)
                 test_writers.add_image('test/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
                 test_writers.add_image('test/Predicted light', CreatObservemapFromL(out_L_show_), i)
                 #print('Test: [{0}/{1}]\t Time {2}\t loss {3}'.format(i, len(val_loader), batch_time, loss_eval))

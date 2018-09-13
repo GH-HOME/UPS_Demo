@@ -67,7 +67,7 @@ parser.add_argument('--bias-decay', default=0, type=float,
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', default=None,
                     help='path to pre-trained model')
-parser.add_argument('--print_intervel',  default=1000,
+parser.add_argument('--print_intervel',  default=200,
                     help='the iter interval for save the model')
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
@@ -81,7 +81,7 @@ n_iter = 0
 Light_num=22
 ChoiseTime=5000
 losstype='angular'
-#pretrainmodel='./Lambertian_direction/09_11_14_28/upsnets,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
+#pretrainmodel='./Lambertian_direction/09_13_09_57/upsnets_bn,adam,300epochs,b16,lr5e-05/model_best.pth.tar'
 pretrainmodel=None
 
 
@@ -112,8 +112,8 @@ def main():
     test_writer = SummaryWriter(os.path.join(save_path, 'test'))
 
     input_transform = image_transforms.Compose([
-        image_transforms.ArrayToTensor(),
-        image_transforms.RandomCrop(8,10,0.75)
+        image_transforms.ArrayToTensor()
+        #image_transforms.RandomCrop(8,10,0.75)
 
     ])
 
@@ -215,39 +215,53 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
     print('=> begin to Extract Data')
     for i, (inputs, target) in enumerate(train_loader):
 
-        #plot the input data
-        # plt.title('origin image')
-        # plt.imshow(inputs['Imgs'][0][0])
-        # plt.show()
-        #
-        # plt.title('P_Light')
-        # plt.imshow(inputs['P_L'][0])
-        # plt.show()
-        # plt.title('Ground truth light')
-        # plt.imshow(target['light'][0])
-        # plt.show()
+        b, n, h, w = inputs['Imgs'].shape
+        th, tw = [8,8]
+        ratio=0.65
+        minilight=10
+        confidence = np.zeros(n)
+        choose_patch_num=100
+        out_L=[]
+        confidence_seg=[]
+        whole_image=inputs['Imgs'].clone()
+        for p in range(choose_patch_num):
+            while True:
+                x1 = np.random.randint(0, w - tw)
+                y1 = np.random.randint(0, h - th)
+                patch = inputs['mask'][0][y1: y1 + th, x1: x1 + tw]
+                count = torch.nonzero(patch).size(0)
+                if count/(th*tw) > 0.95:
+                    x_crop = x1
+                    y_crop = y1
+                    cropImage = whole_image[:, :, y_crop: y_crop + th, x_crop: x_crop + tw]
+                    for k in range(n):
+                        nonzero_num=torch.nonzero(cropImage[0][k]).size(0)
+                        if nonzero_num/(th*tw) < ratio:
+                            confidence[k]=0.0
+                        else:
+                            confidence[k] =(nonzero_num/(th*tw))
 
-        if i % args.print_intervel == 0:
-            args.drawflag=True
+                    if np.nonzero(confidence)[0].shape[0] > minilight:
+                        break
 
-        data_time.update(time.time()-end)
-        input_var=inputs
-        target_var=target
-        for item in inputs.keys():
-            input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
-        for item in target.keys():
-            target_var[item]  = torch.autograd.Variable(target[item]).cuda()
-        out_L=mymodel(input_var,train_writer, args.drawflag)
+            myconfidence = torch.from_numpy(confidence)
+            confidence_seg.append(myconfidence)
+            inputs['confidence'] = myconfidence
+            inputs['Imgs'] = whole_image[:,:, y_crop: y_crop + th, x_crop: x_crop + tw]
 
+            if i % args.print_intervel == 0:
+                args.drawflag=True
 
+            data_time.update(time.time()-end)
+            input_var=inputs
+            target_var=target
+            for item in inputs.keys():
+                input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
+            for item in target.keys():
+                target_var[item]  = torch.autograd.Variable(target[item]).cuda()
+            out_L.append(mymodel(input_var,train_writer, args.drawflag))
 
-        #plot the output data
-        # plt.title('output light image')
-        # out_L_show=out_L.detach().cpu().numpy()
-        # plt.imshow(out_L_show[0][0])
-        # plt.show()
-
-        lossL =calculateLoss_L(out_L,target_var['light'],input_var['confidence'], args.sparse_weight, losstype)
+        lossL =calculateLoss_L(out_L,target_var['light'],confidence_seg, args.sparse_weight, losstype)
         losses.update(lossL.data[0])
         train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
         n_iter+=1
@@ -258,13 +272,13 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         end = time.time()
 
         if args.drawflag:
-            out_L_show=out_L.detach().cpu().numpy()
+            out_L_show=out_L[0].detach().cpu().numpy()
             out_L_show_=out_L_show[0].reshape(-1,3)
             tar_L_show=target['light'].cpu().numpy()
             tar_L_show_=tar_L_show[0].reshape(-1,3)
 
             print('Epoch: [{0}][{1}/{2}]\t Time {3}\t Data {4}\t Loss {5}\t '.format(epoch, i, epoch_size, batch_time, data_time, losses))
-            train_writer.add_image('train/Origin image', inputs['Imgs'][0][0][0],i)
+            # train_writer.add_image('train/Origin image', inputs['Imgs'][0][0][0],i)
             train_writer.add_image('train/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
             train_writer.add_image('train/Predicted light', CreatObservemapFromL(out_L_show_), i)
 
@@ -276,31 +290,73 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
 
 def calculateLoss_L(input_Lmap,target_Lmap, confidence, sparse_weight, type):
 
-    input_Lmap = input_Lmap.view(-1,3).float()
+    if type == 'angular':
+        target_Lmap = target_Lmap.squeeze().float()
+        target_Lmap = target_Lmap.view(-1, 3).float()
+        n, _ = target_Lmap.shape
+        length=len(input_Lmap)
 
-    target_Lmap = target_Lmap.squeeze().float()
-    confidence=confidence.float()
-    target_Lmap = target_Lmap.view(-1, 3)
-    n,_=target_Lmap.shape
+        loss_list = [[] for i in range(n)]
+        var_list=np.zeros(n)
 
-    if type=='L2':
-        mean_vec = torch.mean(input_Lmap, 0).repeat(n, 1)
-        diff_vec = input_Lmap - mean_vec
-        distance = torch.sqrt(torch.sum(diff_vec * diff_vec, 1))
-        lossfn=torch.nn.MSELoss()
-        return lossfn(input_Lmap, target_Lmap)+sparse_weight/distance.mean()
-    elif type == 'angular':
-        diffangle_cos=torch.sum(input_Lmap*target_Lmap.float(),1)
-        GT_angle_cos=torch.ones_like(diffangle_cos)
-        lossfn = torch.nn.MSELoss()
-        #return lossfn(diffangle_cos*confidence,GT_angle_cos*confidence)
-        return torch.abs(diffangle_cos * confidence - GT_angle_cos * confidence).mean()
+        Average_weight=0
+        Average_error=0
+        for i in range(length):
+            input_Lmap[i]=input_Lmap[i].view(-1, 3)
+            confidence_patch = confidence[i].float()
+            for l in range(n):
+                input_light=input_Lmap[i][l]
+                confidence_temp=confidence_patch[l]
+                target_light=target_Lmap[l]
+                diffangle=torch.sum(input_light * target_light).cpu()
+
+                Average_error+=confidence_temp*torch.abs(1-diffangle)
+                Average_weight+=confidence_temp
+
+                if confidence_temp==1:
+                    loss_list[l].append(diffangle.item())
+
+        Average_error = Average_error / Average_weight
+        var_sum=0
+        count_sum=0
+        for i in range(len(loss_list)):
+            if len(loss_list[i])>2:
+                var_sum+=np.array(loss_list[i]).var()
+                count_sum+=1
+        varloss=0
+        if count_sum!=0:
+            varloss=var_sum/count_sum
+
+        return Average_error+varloss
     elif type == 'valid':
-        index=np.where(confidence.cpu().numpy()>0.9)[1]
-        diffangle_cos = torch.sum(input_Lmap * target_Lmap.float(), 1)
-        GT_angle_cos = torch.ones_like(diffangle_cos)
+        target_Lmap = target_Lmap.squeeze().float()
+        target_Lmap = target_Lmap.view(-1, 3).float()
+        n, _ = target_Lmap.shape
+        length = len(input_Lmap)
 
-        return torch.abs(diffangle_cos[index] - GT_angle_cos[index]).mean()
+        loss_list = [[] for i in range(n)]
+        var_list = np.zeros(n)
+
+        Average_weight = 0
+        Average_error = 0
+        for i in range(length):
+            input_Lmap[i] = input_Lmap[i].view(-1, 3)
+            confidence_patch = confidence[i].float()
+            for l in range(n):
+                input_light = input_Lmap[i][l]
+                confidence_temp = confidence_patch[l]
+                target_light = target_Lmap[l]
+                diffangle = torch.sum(input_light * target_light).cpu()
+
+                Average_error += confidence_temp * torch.abs(1 - diffangle)
+                Average_weight += confidence_temp
+
+                if confidence_temp == 1:
+                    loss_list[l].append(diffangle)
+
+        Average_error = Average_error / Average_weight
+
+        return Average_error
     else:
         raise RuntimeError("no loss type")
 
@@ -315,43 +371,72 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
 def validate(val_loader, mymodel, test_writers):
     global args
 
-    batch_time = AverageMeter()
     loss_eval = AverageMeter()
 
     # switch to evaluate mode
     mymodel.eval()
 
-    end = time.time()
     with torch.no_grad():
         for i, (inputs, target) in enumerate(val_loader):
 
-            if i % args.print_intervel == 0:
-                args.drawflag = True
+            b, n, h, w = inputs['Imgs'].shape
+            th, tw = [8, 8]
+            ratio = 0.65
+            minilight = 10
+            confidence = np.zeros(n)
+            choose_patch_num = 100
+            out_L = []
+            confidence_seg = []
+            whole_image = inputs['Imgs'].clone()
+            for p in range(choose_patch_num):
+                while True:
+                    x1 = np.random.randint(0, w - tw)
+                    y1 = np.random.randint(0, h - th)
+                    patch = inputs['mask'][0][y1: y1 + th, x1: x1 + tw]
+                    count = torch.nonzero(patch).size(0)
+                    if count / (th * tw) > 0.95:
+                        x_crop = x1
+                        y_crop = y1
+                        cropImage = whole_image[:, :, y_crop: y_crop + th, x_crop: x_crop + tw]
+                        for k in range(n):
+                            nonzero_num = torch.nonzero(cropImage[0][k]).size(0)
+                            if nonzero_num / (th * tw) < ratio:
+                                confidence[k] = 0.0
+                            else:
+                                confidence[k] = (nonzero_num / (th * tw))
 
-            input_var = inputs
-            target_var = target
-            for item in inputs.keys():
-                input_var[item] = torch.autograd.Variable(inputs[item].cuda())
-            for item in target.keys():
-                target_var[item] = torch.autograd.Variable(target[item].cuda())
-            out_L = mymodel(input_var,test_writers,args.drawflag)
+                        if np.nonzero(confidence)[0].shape[0] > minilight:
+                            break
 
-            lossL = calculateLoss_L(out_L, target_var['light'],input_var['confidence'], args.sparse_weight,'valid')
+                myconfidence = torch.from_numpy(confidence)
+                confidence_seg.append(myconfidence)
+                inputs['confidence'] = myconfidence
+                inputs['Imgs'] = whole_image[:, :, y_crop: y_crop + th, x_crop: x_crop + tw]
+
+                if i % args.print_intervel == 0:
+                    args.drawflag = True
+
+                input_var = inputs
+                target_var = target
+                for item in inputs.keys():
+                    input_var[item] = torch.autograd.Variable(inputs[item]).cuda()
+                for item in target.keys():
+                    target_var[item] = torch.autograd.Variable(target[item]).cuda()
+                out_L.append(mymodel(input_var, test_writers, args.drawflag))
+
+            lossL = calculateLoss_L(out_L, target_var['light'], confidence_seg, args.sparse_weight,'valid')
 
             loss_eval.update(lossL)
             test_writers.add_scalar('test_loss', lossL.data[0], i)
             # measure elapsed time
 
-            batch_time.update(time.time() - end)
-            end = time.time()
-
             if args.drawflag:
-                out_L_show = out_L.detach().cpu().numpy()
+                out_L_show = out_L[0].detach().cpu().numpy()
                 out_L_show_ = out_L_show[0].reshape(-1, 3)
                 tar_L_show = target['light'].cpu().numpy()
                 tar_L_show_ = tar_L_show[0].reshape(-1, 3)
 
-                test_writers.add_image('test/Origin image', inputs['Imgs'][0][0][0], i)
+                #test_writers.add_image('test/Origin image', inputs['Imgs'][0][0][0], i)
                 test_writers.add_image('test/Ground truth light', CreatObservemapFromL(tar_L_show_), i)
                 test_writers.add_image('test/Predicted light', CreatObservemapFromL(out_L_show_), i)
                 #print('Test: [{0}/{1}]\t Time {2}\t loss {3}'.format(i, len(val_loader), batch_time, loss_eval))

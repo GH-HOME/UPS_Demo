@@ -104,7 +104,7 @@ class Upsnets(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, inputs,train_writer=None, printflag=False):
-        images = inputs['Imgs'][0]
+        images = inputs['Imgs']
         Batch_size, Light_num, w,h =images.shape
 
         out_encoder = torch.randn((Light_num, Batch_size, 3, w, h), dtype=torch.float).cuda()
@@ -115,7 +115,7 @@ class Upsnets(nn.Module):
         out_encoder_max=torch.max(out_encoder,0)[0]  # this can be used to weak supervise normal and albedo
         #out_encoder_max=out_encoder_max.squeeze()
 
-        out_L=torch.randn((Batch_size, Light_num, 3), dtype=torch.float).cuda()
+        out_L=torch.zeros((Batch_size, Light_num, 3), dtype=torch.float).cuda()
 
         for b in range(Batch_size):
             for i in range(Light_num):

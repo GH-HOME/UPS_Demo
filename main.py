@@ -52,7 +52,7 @@ parser.add_argument('--epoch-size', default=0, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
 parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=5e-5, type=float,
                     metavar='W', help='weight for control sparsity in loss')
 parser.add_argument('--lr', '--learning-rate', default=5e-5, type=float,
                     metavar='LR', help='initial learning rate')

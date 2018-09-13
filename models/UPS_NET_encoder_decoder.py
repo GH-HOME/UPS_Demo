@@ -79,7 +79,7 @@ class Upsnets(nn.Module):
         self.fc3 = fc(64*3*3, 128*3*3)
         self.fc_l1=fc(128*3*3,64*3)
         self.fc_l2 = nn.Linear(64*3, 3)
-        self.dropout = nn.Dropout(0.8)
+        self.dropout = nn.Dropout(0.5)
 
         self.feature_compress = nn.Sequential(
             self.conv_image_light1,
@@ -91,6 +91,7 @@ class Upsnets(nn.Module):
             self.fc2,
             self.fc3,
             self.fc_l1,
+            self.dropout,
             self.fc_l2
         )
         self.relu=nn.ReLU(inplace=True)

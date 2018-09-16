@@ -61,7 +61,7 @@ class Upsnets(nn.Module):
         self.conv3 = conv(self.batchNorm, 64, 128, kernel_size=3, stride=1)
         self.conv3_1 = conv(self.batchNorm, 128, 128, kernel_size=3, stride=1)
         self.conv4 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=1)
-        self.conv5 = conv(self.batchNorm, 256, 3, kernel_size=1, stride=1)
+        self.conv5 = conv(self.batchNorm, 256, 1, kernel_size=3, stride=1)
 
         self.encoder=nn.Sequential(
             self.conv1,
@@ -72,7 +72,7 @@ class Upsnets(nn.Module):
             self.conv5
         )
 
-        self.conv_image_light1=conv(self.batchNorm,3+1,32,kernel_size=5,stride=1)
+        self.conv_image_light1=conv(self.batchNorm,1+1,32,kernel_size=5,stride=1)
         self.conv_image_light2 = conv(self.batchNorm, 32, 1, kernel_size=3, stride=1)
         self.fc1 = fc(input_size*input_size, 32*5*5)
         self.fc2 = fc(32*5*5, 64*3*3)
@@ -91,7 +91,6 @@ class Upsnets(nn.Module):
             self.fc2,
             self.fc3,
             self.fc_l1,
-            self.dropout,
             self.fc_l2
         )
         self.relu=nn.ReLU(inplace=True)
@@ -106,14 +105,17 @@ class Upsnets(nn.Module):
 
     def forward(self, inputs,train_writer=None, printflag=False):
         images = inputs['Imgs']
+        masks=inputs['mask']
         Batch_size, Light_num, w,h =images.shape
 
-        out_encoder = torch.randn((Light_num, Batch_size, 3, w, h), dtype=torch.float).cuda()
+        out_encoder = torch.randn((Light_num, Batch_size, 1, w, h), dtype=torch.float).cuda()
         for i in range(Light_num):
             input_image_single=images[:,i,:,:].unsqueeze(1).float()
             out_encoder[i]=self.encoder(input_image_single)
 
         out_encoder_max=torch.max(out_encoder,0)[0]  # this can be used to weak supervise normal and albedo
+        out_encoder_max=torch.where(masks.unsqueeze(1)!=0, out_encoder_max,masks.unsqueeze(1).float())
+
         #out_encoder_max=out_encoder_max.squeeze()
 
         out_L=torch.randn((Batch_size, Light_num, 3), dtype=torch.float).cuda()
@@ -139,6 +141,7 @@ class Upsnets(nn.Module):
 
         if train_writer is not None and printflag:
             train_writer.add_image('Internel/images', images.cpu().numpy()[0, 0, :, :])
+            train_writer.add_image('Internel/mask', masks.cpu().numpy()[0, :, :])
             train_writer.add_image('Internel/out_encoder_max', out_encoder_max.detach().cpu().numpy()[0])
 
 

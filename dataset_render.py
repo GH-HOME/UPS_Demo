@@ -12,6 +12,7 @@ import datetime
 import matplotlib.pyplot as plt
 from generateLight import LightGen
 import mydraw
+from CreateIntensityContour import *
 
 class UPSDataset(object):
     '''
@@ -26,7 +27,8 @@ class UPSDataset(object):
         self.datalist=[]  # data list text which used to load data
         self.originalNlist=[]
         self.albedo=1
-        self.total_Num = 60*2  # total light in the sphere, for the semi-sphere light, you need to *2
+        self.total_Num = 500*2  # total light in the sphere, for the semi-sphere light, you need to *2
+        self.isdrawContor=True
 
 
         self.Light=[]
@@ -136,8 +138,11 @@ class UPSDataset(object):
 
             # cv2.imshow('',m_img[:, :, ::-1])
             # cv2.waitKey()
-
             cv2.imwrite(write_path, m_img[:, :, ::-1])
+            if self.isdrawContor:
+                createContor = CreateIntensityContour(write_path, 12)
+                createContor.createContour()
+
 
 
     def rendering(self):

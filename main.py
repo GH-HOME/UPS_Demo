@@ -48,13 +48,13 @@ parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('--epoch-size', default=0, type=int, metavar='N',
+parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=16, type=int,
+parser.add_argument('-b', '--batch-size', default=6, type=int,
                     metavar='N', help='mini-batch size')
-parser.add_argument('-sw', '--sparse_weight', default=5e-5, type=float,
+parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=5e-5, type=float,
+parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -67,18 +67,18 @@ parser.add_argument('--bias-decay', default=0, type=float,
 parser.add_argument('--no_date',default=False,type=bool,help='If use data in folder name')
 parser.add_argument('--pretrained', default=None,
                     help='path to pre-trained model')
-parser.add_argument('--print_intervel',  default=400,
+parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
-parser.add_argument('--milestones', default=[50,100,150,200,250], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
+parser.add_argument('--milestones', default=[10,20,50,80,150], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
 
 
 best_EPE = 999
 n_iter = 0
-Light_num=10
+Light_num=5
 ChoiseTime=5000
 losstype='angular'
 #pretrainmodel='./Lambertian_direction/09_11_14_28/upsnets,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
@@ -113,7 +113,9 @@ def main():
 
     input_transform = image_transforms.Compose([
         image_transforms.ArrayToTensor(),
-        image_transforms.CenterCrop(128)
+        image_transforms.CenterCrop(128),
+        image_transforms.RandomVerticalFlip(),
+        image_transforms.RandomHorizontalFlip()
 
     ])
 

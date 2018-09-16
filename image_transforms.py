@@ -71,6 +71,7 @@ class CenterCrop(object):
         y1 = int(round((h1 - th) / 2.))
 
         inputs['Imgs'] = inputs['Imgs'][:, y1: y1 + th, x1: x1 + tw]
+        inputs['mask'] = inputs['mask'][y1: y1 + th, x1: x1 + tw]
         return inputs, targets
 
 
@@ -133,6 +134,7 @@ class RandomCrop(object):
                 break
 
         inputs['Imgs'] = inputs['Imgs'][:, y_crop: y_crop + th, x_crop: x_crop + tw]
+        inputs['mask'] = inputs['mask'][y_crop: y_crop + th, x_crop: x_crop + tw]
         return inputs, target
 
 
@@ -203,6 +205,7 @@ class RandomHorizontalFlip(object):
             for i in range(n):
                 inputs['Imgs'][i]=torch.from_numpy(np.copy(np.fliplr(inputs['Imgs'][i])))
 
+            inputs['mask'] = torch.from_numpy(np.copy(np.fliplr(inputs['mask'])))
         return inputs,target
 
 
@@ -215,6 +218,7 @@ class RandomVerticalFlip(object):
             n,w,h = inputs['Imgs'].shape
             for i in range(n):
                 inputs['Imgs'][i]=torch.from_numpy(np.copy(np.flipud(inputs['Imgs'][i])))
+            inputs['mask'] = torch.from_numpy(np.copy(np.flipud(inputs['mask'])))
 
         return inputs,target
 

@@ -48,13 +48,13 @@ parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('--epoch-size', default=1500, type=int, metavar='N',
+parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=1, type=int,
+parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-5, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
@@ -72,7 +72,7 @@ parser.add_argument('--print_intervel',  default=500,
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
 parser.add_argument('--milestones', default=[20,40,60,80,150], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
-parser.add_argument('-e', '--evaluate', dest='evaluate',default=True, action='store_true',
+parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
 
 
@@ -81,8 +81,8 @@ n_iter = 0
 Light_num=5
 ChoiseTime=5000
 losstype='angular'
-pretrainmodel='./Lambertian_direction/09_18_16_20/upsnets_bn,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
-#pretrainmodel=None
+#pretrainmodel='./Lambertian_direction/09_18_16_20/upsnets_bn,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
+pretrainmodel=None
 
 
 def main():

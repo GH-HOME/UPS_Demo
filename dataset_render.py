@@ -121,7 +121,7 @@ class UPSDataset(object):
 
         assert M.shape == (light_num, 3, m * n)
         assert N.shape == (3, m * n)
-        mask_file_name= obj_name+"_M.png"
+        mask_file_name= obj_name+"_M.bmp"
         mask_file_name = os.path.join(self.tardatasetdir, mask_file_name)
 
         normal_file_name = obj_name + "_N.txt"
@@ -133,7 +133,7 @@ class UPSDataset(object):
             m_img = M[l, :, :]  # [light_num, 3, m*n]
             m_img = m_img.astype(np.float) / np.max(M) * np.iinfo(np.uint16).max
             m_img = m_img.T.reshape(m, n, 3).astype(np.uint16)
-            write_path=os.path.join(self.tardatasetdir, obj_name+"_L_{:0>4d}.png".format(l))
+            write_path=os.path.join(self.tardatasetdir, obj_name+"_L_{:0>4d}.bmp".format(l))
             self.datalist.append(write_path)
 
             # cv2.imshow('',m_img[:, :, ::-1])

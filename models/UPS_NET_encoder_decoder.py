@@ -57,21 +57,21 @@ class Upsnets(nn.Module):
 
         #non share weight
 
-        # self.conv1 = conv(self.batchNorm, 1, 32, kernel_size=5, stride=1)
-        # self.conv2 = conv(self.batchNorm, 32, 64, kernel_size=3, stride=1)
-        # self.conv3 = conv(self.batchNorm, 64, 128, kernel_size=3, stride=1)
-        # self.conv4 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=1)
-        # self.conv5 = conv(self.batchNorm, 256, 3, kernel_size=3, stride=1)
-        #
-        # self.encoder=nn.Sequential(
-        #     self.conv1,
-        #     self.conv2,
-        #     self.conv3,
-        #     self.conv4,
-        #     self.conv5
-        # )
+        self.conv1 = conv(self.batchNorm, 1, 32, kernel_size=5, stride=1)
+        self.conv2 = conv(self.batchNorm, 32, 64, kernel_size=3, stride=1)
+        self.conv3 = conv(self.batchNorm, 64, 128, kernel_size=3, stride=1)
+        self.conv4 = conv(self.batchNorm, 128, 256, kernel_size=3, stride=1)
+        self.conv5 = conv(self.batchNorm, 256, 3, kernel_size=3, stride=1)
 
-        self.conv_image_light1=conv(self.batchNorm,1+3,32,kernel_size=5,stride=1)
+        self.encoder=nn.Sequential(
+            self.conv1,
+            self.conv2,
+            self.conv3,
+            self.conv4,
+            self.conv5
+        )
+
+        self.conv_image_light1=conv(self.batchNorm,1+3,32,kernel_size=3,stride=1)
         self.conv_image_light2 = conv(self.batchNorm, 32, 1, kernel_size=3, stride=1)
         self.fc1 = fc(input_size*input_size, 32*5)
         self.fc2 = fc(32*5, 64*3)
@@ -85,7 +85,9 @@ class Upsnets(nn.Module):
 
         self.light_infer=nn.Sequential(
             self.fc1,
+            #self.dropout,
             self.fc2,
+            self.dropout,
             self.fc_l2
         )
         self.relu=nn.ReLU(inplace=True)
@@ -98,28 +100,26 @@ class Upsnets(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+        self.out_encoder_max_single = np.load('out_encoder_max.npy')
+
     def forward(self, inputs,train_writer=None, printflag=False):
         images = inputs['Imgs']
         masks=inputs['mask']
         Batch_size, Light_num, w,h =images.shape
 
-        # out_encoder = torch.randn((Light_num, Batch_size, 3, w, h), dtype=torch.float).cuda()
-        # #out_encoder_max_noise=torch.zeros((3, w, h), dtype=torch.float).cuda()
-        # for i in range(Light_num):
-        #     input_image_single=images[:,i,:,:].unsqueeze(1).float()
-        #     out_encoder[i]=self.encoder(input_image_single)
-        #
-        # # Max sample
-        # out_encoder_max=torch.max(out_encoder,0)[0]  # this can be used to weak supervise normal and albedo
-        # #out_encoder_max=out_encoder_max_noise
-        # # Average sample
-        # #out_encoder_max = torch.mean(out_encoder, 0)  # this can be used to weak supervise normal and albedo
-        # out_encoder_max=torch.where(masks.unsqueeze(1)!=0, out_encoder_max,masks.unsqueeze(1).float())
+        out_encoder = torch.randn((Light_num, Batch_size, 3, w, h), dtype=torch.float).cuda()
+        for i in range(Light_num):
+            input_image_single=images[:,i,:,:].unsqueeze(1).float()
+            out_encoder[i]=self.encoder(input_image_single)
 
-        #out_encoder_max=out_encoder_max.squeeze()
-        out_encoder_max_single=np.load('out_encoder_max.npy')
-        out_encoder_max=torch.from_numpy(out_encoder_max_single.repeat(Batch_size,axis=0)).cuda()
-        out_encoder_max = torch.where(masks.unsqueeze(1) != 0, out_encoder_max, masks.unsqueeze(1).float())
+        # Max sample
+        out_encoder_max=torch.max(out_encoder,0)[0]  # this can be used to weak supervise normal and albedo
+        # Average sample
+        #out_encoder_max = torch.mean(out_encoder, 0)  # this can be used to weak supervise normal and albedo
+        out_encoder_max=torch.where(masks.unsqueeze(1)!=0, out_encoder_max,masks.unsqueeze(1).float())
+
+        # out_encoder_max=torch.from_numpy(self.out_encoder_max_single.repeat(Batch_size,axis=0)).cuda()
+        # out_encoder_max = torch.where(masks.unsqueeze(1) != 0, out_encoder_max, masks.unsqueeze(1).float())
 
         out_L=torch.randn((Batch_size, Light_num, 3), dtype=torch.float).cuda()
 

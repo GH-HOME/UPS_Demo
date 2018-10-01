@@ -33,7 +33,7 @@ parser.add_argument('--dataname', metavar='DataName',default='Lambertian_directi
 group = parser.add_mutually_exclusive_group()
 group.add_argument('-s', '--split-file', default=None, type=str,
                    help='test-val split file')
-group.add_argument('--split-value', default=0.8, type=float,
+group.add_argument('--split-value', default=0.9, type=float,
                    help='test-val split proportion (between 0 (only test) and 1 (only train))')
 
 parser.add_argument('--arch', '-a', metavar='ARCH', default='upsnets_bn',
@@ -50,17 +50,17 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
-parser.add_argument('-b', '--batch-size', default=16, type=int,
+parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('-sw', '--sparse_weight', default=0, type=float,
                     metavar='W', help='weight for control sparsity in loss')
-parser.add_argument('--lr', '--learning-rate', default=1e-5, type=float,
+parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum for sgd, alpha parameter for adam')
 parser.add_argument('--beta', default=0.999, type=float, metavar='M',
                     help='beta parameter for adam')
-parser.add_argument('--weight-decay', '--wd', default=0, type=float,
+parser.add_argument('--weight-decay', '--wd', default=0.00001, type=float,
                     metavar='W', help='weight decay')
 parser.add_argument('--bias-decay', default=0, type=float,
                     metavar='B', help='bias decay')
@@ -71,15 +71,15 @@ parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
-parser.add_argument('--milestones', default=[20,40,60,80,150], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
+parser.add_argument('--milestones', default=[40,70,100,120], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
 
 
 best_EPE = 999
 n_iter = 0
-Light_num=5
-ChoiseTime=5000
+Light_num=30
+ChoiseTime=10000
 losstype='angular'
 #pretrainmodel='./Lambertian_direction/09_18_16_20/upsnets_bn,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
 pretrainmodel=None
@@ -172,11 +172,6 @@ def main():
     for epoch in range(args.start_epoch, args.epochs):
         scheduler.step()
 
-        # epoch_adjust_size=12
-        # if epoch>epoch_adjust_size:
-        #     args.sparse_weight = 0.0
-        # else:
-        #     args.sparse_weight-epoch*0.08
         train_loss = train(train_loader, mymodel, optimizer, epoch, train_writer)
         train_writer.add_scalar('mean loss in train epoch', train_loss, epoch)
 
@@ -245,7 +240,7 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         # plt.imshow(out_L_show[0][0])
         # plt.show()
 
-        lossL =calculateLoss_L(out_L,target_var['light'],args.sparse_weight,losstype)
+        lossL,out_L_show =calculateLoss_L(out_L,target_var['light'],args.sparse_weight,losstype)
         losses.update(lossL.data[0])
         train_writer.add_scalar('train_loss', lossL.data[0], n_iter)
         n_iter+=1
@@ -256,7 +251,8 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
         end = time.time()
 
         if args.drawflag:
-            out_L_show=out_L.detach().cpu().numpy()
+            out_L_show=out_L_show.detach().cpu().numpy()
+            out_L_show=out_L_show.reshape(-1,Light_num,3)
             out_L_show_=out_L_show[0].reshape(-1,3)
             tar_L_show=target['light'].cpu().numpy()
             tar_L_show_=tar_L_show[0].reshape(-1,3)
@@ -272,9 +268,16 @@ def train(train_loader, mymodel, optimizer, epoch, train_writer):
     return losses.avg
 
 
-def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
+def calculateLoss_L(input_Lmap, target_Lmap, sparse_weight, type):
 
-    input_Lmap = input_Lmap.view(-1,3).float()
+    out_L_norm = torch.norm(input_Lmap, 2, 2)
+    normal_GT=torch.ones_like(out_L_norm)
+
+    out_L_norm_squ = out_L_norm.view(-1).unsqueeze(1)
+    out_L_norm_rep = out_L_norm_squ.repeat(1, 3)
+
+    input_Lmap = input_Lmap.view(-1, 3).float()
+    input_Lmap = input_Lmap / out_L_norm_rep
 
     target_Lmap = target_Lmap.squeeze().float()
     target_Lmap = target_Lmap.view(-1, 3)
@@ -290,11 +293,11 @@ def calculateLoss_L(input_Lmap,target_Lmap, sparse_weight, type):
         diffangle_cos=torch.sum(input_Lmap*target_Lmap.float(),1)
         GT_angle_cos=torch.ones_like(diffangle_cos)
         lossfn = torch.nn.MSELoss()
-        #return lossfn(diffangle_cos,GT_angle_cos)
-        return torch.abs(diffangle_cos-GT_angle_cos).mean()  #L1
+        return [lossfn(diffangle_cos,GT_angle_cos)+0.2*lossfn(out_L_norm,normal_GT),input_Lmap]
+        #return torch.abs(diffangle_cos-GT_angle_cos).mean() #L1
     elif type == 'valid':
         diffangle_cos = torch.abs(1 - torch.sum(input_Lmap * target_Lmap.float(), 1))
-        return diffangle_cos.mean()
+        return [diffangle_cos.mean(),input_Lmap]
     else:
         raise RuntimeError("no loss type")
 
@@ -330,7 +333,7 @@ def validate(val_loader, mymodel, test_writers):
                 target_var[item] = torch.autograd.Variable(target[item].cuda())
             out_L = mymodel(input_var,test_writers,args.drawflag)
 
-            lossL = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,'valid')
+            lossL,out_L_show = calculateLoss_L(out_L, target_var['light'], args.sparse_weight,'valid')
 
             loss_eval.update(lossL)
             test_writers.add_scalar('test_loss', lossL.data[0], i)
@@ -340,7 +343,8 @@ def validate(val_loader, mymodel, test_writers):
             end = time.time()
 
             if args.drawflag:
-                out_L_show = out_L.detach().cpu().numpy()
+                out_L_show = out_L_show.detach().cpu().numpy()
+                out_L_show = out_L_show.reshape(-1, Light_num, 3)
                 out_L_show_ = out_L_show[0].reshape(-1, 3)
                 tar_L_show = target['light'].cpu().numpy()
                 tar_L_show_ = tar_L_show[0].reshape(-1, 3)

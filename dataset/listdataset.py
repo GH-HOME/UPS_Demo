@@ -32,6 +32,10 @@ class ListDataset(data.Dataset):
         inputs={'Imgs':images, 'mask':mask}
         targets={'light':Light_sample}
 
+        inputs['Imgs']=np.array(inputs['Imgs'])
+        inputs['mask'] = np.array(inputs['mask'])
+        targets['light'] = np.array(targets['light'])
+
 
         if self.co_transform is not None:
             inputs, targets = self.co_transform(inputs, targets)

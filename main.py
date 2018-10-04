@@ -8,16 +8,12 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-import torchvision.transforms as tramsforms
-import image_transforms
+from dataset import image_transforms
 import models
 import dataset
-from matplotlib import pyplot as plt
 import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
-import math
-import mydraw
 
 model_names=sorted(name for name in models.__dict__
                    if name.islower() and not name.startswith("__"))
@@ -48,7 +44,7 @@ parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('--epoch-size', default=1000, type=int, metavar='N',
+parser.add_argument('--epoch-size', default=2000, type=int, metavar='N',
                     help='manual epoch size (will match dataset size if set to 0)')
 parser.add_argument('-b', '--batch-size', default=8, type=int,
                     metavar='N', help='mini-batch size')
@@ -71,7 +67,7 @@ parser.add_argument('--print_intervel',  default=500,
                     help='the iter interval for save the model')
 parser.add_argument('-df', '--drawflag', dest='drawflag',default=False, action='store_true',
                     help='draw model output in tensorboardX')
-parser.add_argument('--milestones', default=[20,40,60,80,150], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
+parser.add_argument('--milestones', default=[10,20,30,40,150], metavar='N', nargs='*', help='epochs at which learning rate is divided by 2')
 parser.add_argument('-e', '--evaluate', dest='evaluate',default=False, action='store_true',
                     help='evaluate model on validation set')
 
@@ -81,8 +77,8 @@ n_iter = 0
 Light_num=20
 ChoiseTime=10000
 losstype='angular'
-#pretrainmodel='./Lambertian_direction/09_11_14_28/upsnets,adam,300epochs,b16,lr0.0002/model_best.pth.tar'
-pretrainmodel=None
+pretrainmodel='./Lambertian_direction/10_04_00_29/upsnets_bn,adam,300epochs,epochSize2000,b8,lr0.001/model_best.pth.tar'
+#pretrainmodel=None
 
 
 def main():
@@ -112,8 +108,10 @@ def main():
     test_writer = SummaryWriter(os.path.join(save_path, 'test'))
 
     input_transform = image_transforms.Compose([
-        image_transforms.ArrayToTensor(),
-        image_transforms.CenterCrop(128)
+        image_transforms.CenterCrop(128),
+        #image_transforms.CalculatePusudeNormal(),
+        image_transforms.ChangeOrder(),
+        image_transforms.ArrayToTensor()
     ])
 
     print("=> fetching img pairs in '{}'".format(args.datadir))

@@ -5,10 +5,11 @@ import numpy as np
 import numbers
 import types
 import scipy.ndimage as ndimage
+from .Calculate_Pseudo_NL import Pseudo_NL_calculator
 
 '''Set of tranform random routines that takes both input and target as arguments,
 in order to have random but coherent transformations.
-inputs are PIL Image pairs and targets are ndarrays'''
+inputs are PIL Image pairs and target are ndarrays'''
 
 
 class Compose(object):
@@ -31,13 +32,15 @@ class Compose(object):
 
 class ArrayToTensor(object):
 
-    def __call__(self, inputs, targets):
+    def __call__(self, inputs, target):
         inputs['Imgs'] = torch.from_numpy(np.array(inputs['Imgs']))
         inputs['mask'] = torch.from_numpy(np.array(inputs['mask']))
+        #inputs['P_L'] = torch.from_numpy(np.array(inputs['P_L']))
+        #inputs['P_N'] = torch.from_numpy(np.array(inputs['P_N']))
 
-        targets['light']=torch.from_numpy(np.array(targets['light']))
+        target['light']=torch.from_numpy(np.array(target['light']))
 
-        return inputs, targets
+        return inputs, target
 
 
 class Lambda(object):
@@ -50,6 +53,35 @@ class Lambda(object):
     def __call__(self, input,target):
         return self.lambd(input,target)
 
+
+class ChangeOrder(object):
+    def __call__(self, inputs, target):
+
+        l, h, w = inputs['Imgs'].shape
+        x_index=np.arange(0,h)
+        y_index=np.arange(0,w)
+        x_mul=np.repeat(x_index,[w]).reshape([h,w])
+        y_mul = np.repeat(y_index, [h]).reshape([w, h]).transpose()
+        orderproof=np.zeros(l,dtype=np.float)
+        for i in range(l):
+            sumimage = np.sum(inputs['Imgs'][i])
+            x=np.sum(x_mul*inputs['Imgs'][i])/sumimage
+            y=np.sum(y_mul*inputs['Imgs'][i])/sumimage
+            orderproof[i]=x+y
+
+        index=np.argsort(orderproof)
+        inputs['Imgs']=inputs['Imgs'][index]
+        target['light'] = target['light'][index]
+        return inputs, target
+
+
+class CalculatePusudeNormal(object):
+    def __call__(self, inputs, target):
+        Pcalculator = Pseudo_NL_calculator(inputs['Imgs'], inputs['mask'])
+        Pcalculator.calculate()
+        inputs['P_N']=Pcalculator.P_N
+        inputs['P_L'] = Pcalculator.P_L
+        return inputs, target
 
 class CenterCrop(object):
     """Crops the given inputs and target arrays at the center to have a region of
@@ -64,7 +96,8 @@ class CenterCrop(object):
         else:
             self.size = size
 
-    def __call__(self, inputs, targets):
+    def __call__(self, inputs, target):
+
         _, h1, w1= inputs['Imgs'].shape
         th, tw = self.size
         x1 = int(round((w1 - tw) / 2.))
@@ -72,7 +105,7 @@ class CenterCrop(object):
 
         inputs['Imgs'] = inputs['Imgs'][:, y1: y1 + th, x1: x1 + tw]
         inputs['mask'] = inputs['mask'][y1: y1 + th, x1: x1 + tw]
-        return inputs, targets
+        return inputs, target
 
 
 class Scale(object):
@@ -137,62 +170,6 @@ class RandomCrop(object):
         inputs['mask'] = inputs['mask'][y_crop: y_crop + th, x_crop: x_crop + tw]
         return inputs, target
 
-
-# class RandomCrop(object):
-#     """Crops the given PIL.Image at a random location to have a region of
-#     the given size. size can be a tuple (target_height, target_width)
-#     or an integer, in which case the target will be of a square shape (size, size)
-#     """
-#
-#     def __init__(self, size, miniLight, ratio):
-#         if isinstance(size, numbers.Number):
-#             self.size = (int(size), int(size))
-#             self.total_batch_pixel=size*size
-#             self.miniLight=miniLight
-#             self.ratio=ratio
-#         else:
-#             self.size = size
-#             self.total_batch_pixel = size[0] * size[1]
-#             self.miniLight = miniLight
-#             self.ratio = ratio
-#
-#     def __call__(self, inputs,target):
-#         n, h, w = inputs['Imgs'].shape
-#
-#         th, tw = self.size
-#         if w == tw and h == th:
-#             return inputs,target
-#
-#         x_crop=0
-#         y_crop=0
-#         confidence=np.zeros(n)
-#         while True:
-#             x1 = random.randint(0, w - tw)
-#             y1 = random.randint(0, h - th)
-#             patch=inputs['mask'][y1: y1 + th,x1: x1 + tw]
-#             count=torch.nonzero(patch).size(0)
-#             if count/(self.size[0]*self.size[1])>0.95:
-#                 x_crop=x1
-#                 y_crop=y1
-#                 cropImage=inputs['Imgs'][:, y_crop: y_crop + th, x_crop: x_crop + tw]
-#                 for i in range(n):
-#                     nonzero_num=torch.nonzero(cropImage[i]).size(0)
-#                     if nonzero_num/self.total_batch_pixel<self.ratio:
-#                         confidence[i]=0.0
-#                     else:
-#                         confidence[i] =(nonzero_num/self.total_batch_pixel)
-#
-#                 if np.nonzero(confidence)[0].shape[0]>self.miniLight:
-#                     break
-#
-#         index=np.where(confidence!=0)
-#         inputs['Imgs'] = inputs['Imgs'][index, y_crop: y_crop + th, x_crop: x_crop + tw]
-#         target['light']=target['light'][index]
-#
-#         confidence=torch.from_numpy(confidence)
-#
-#         inputs['confidence']=confidence[index]
-#         return inputs, target
 
 
 class RandomHorizontalFlip(object):

@@ -27,8 +27,8 @@ class UPSDataset(object):
         self.datalist=[]  # data list text which used to load data
         self.originalNlist=[]
         self.albedo=1
-        self.total_Num = 500*2  # total light in the sphere, for the semi-sphere light, you need to *2
-        self.isdrawContor=True
+        self.total_Num = 30*2  # total light in the sphere, for the semi-sphere light, you need to *2
+        self.isdrawContor=False
 
 
         self.Light=[]
